@@ -1,2 +1,21 @@
+import click
+
+
+@click.group()
 def cli():
-    print("Hello from pypeline!")
+    pass
+
+
+@click.command()
+def initdb():
+    """INIT DB DOCSTRING"""
+    click.echo("Initialized the database")
+
+
+@click.command()
+def dropdb():
+    click.echo("Dropped the database")
+
+
+cli.add_command(initdb)
+cli.add_command(dropdb)

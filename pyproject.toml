@@ -26,7 +26,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 license = "MIT"
-dependencies = []
+dependencies = [
+    "click==8.3.1"
+]
 
 keywords = ["cli", "pipeline", "data"]
 
