@@ -1,21 +1,11 @@
 import click
 
+from .commands.init import init
+
 
 @click.group()
 def cli():
     pass
 
 
-@click.command()
-def initdb():
-    """INIT DB DOCSTRING"""
-    click.echo("Initialized the database")
-
-
-@click.command()
-def dropdb():
-    click.echo("Dropped the database")
-
-
-cli.add_command(initdb)
-cli.add_command(dropdb)
+cli.add_command(init)
