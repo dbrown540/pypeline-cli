@@ -106,13 +106,15 @@ def validate_email(email: str) -> tuple[bool, str]:
     return True, ""
 
 
+def validate_license(license: str) -> tuple[bool, str]: ...
+
+
 # Mapping of parameter names to their validator functions
 PARAM_VALIDATORS = {
     "name": validate_project_name,
     "project_name": validate_project_name,
     "author_email": validate_email,
     "email": validate_email,
-    # Add more validators as needed
 }
 
 

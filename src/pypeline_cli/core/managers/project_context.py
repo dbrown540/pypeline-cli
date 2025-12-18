@@ -57,3 +57,55 @@ class ProjectContext:
             / "templates"
             / "dependencies.py.template"
         )
+
+    @property
+    def licenses_path(self) -> Path:
+        return self.project_root / "LICENSE"
+
+    @property
+    def pipelines_folder_path(self) -> Path:
+        return self.project_root / "pipeilnes"
+
+    @property
+    def schemas_folder_path(self) -> Path:
+        return self.project_root / "schemas"
+
+    @property
+    def integration_tests_folder_path(self) -> Path:
+        return self.project_root / "tests"
+
+    @property
+    def project_utils_folder_path(self) -> Path:
+        return self.project_root / "utils"
+
+    @property
+    def columns_file(self) -> Path:
+        return self.project_utils_folder_path / "columns.py"
+
+    @property
+    def databases_file(self) -> Path:
+        return self.project_utils_folder_path / "databases.py"
+
+    @property
+    def date_parser_file(self) -> Path:
+        return self.project_utils_folder_path / "date_parser.py"
+
+    @property
+    def decorators_file(self) -> Path:
+        return self.project_utils_folder_path / "decorators.py"
+
+    @property
+    def etl_file(self) -> Path:
+        return self.project_utils_folder_path / "etl.py"
+
+    @property
+    def logger_file(self) -> Path:
+        return self.project_utils_folder_path / "logger.py"
+
+    @property
+    def snowflake_utils_file(self) -> Path:
+        return self.project_utils_folder_path / "snowflake_utils.py"
+
+    @property
+    def tables_file(self) -> Path:
+        return self.project_utils_folder_path / "tables.py"

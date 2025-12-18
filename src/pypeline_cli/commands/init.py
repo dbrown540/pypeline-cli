@@ -4,7 +4,7 @@ from ..utils.resolve_path import resolve_path
 from ..core.create_project import create_project
 from ..utils.valdators import validate_params
 from ..core.managers.project_context import ProjectContext
-from ..config import ALLOWED_LICENSE
+from ..config import LICENSES
 
 
 @click.command()
@@ -29,11 +29,17 @@ from ..config import ALLOWED_LICENSE
 )
 @click.option(
     "--license",
-    type=click.Choice(ALLOWED_LICENSE, case_sensitive=False),
+    type=click.Choice(LICENSES.keys(), case_sensitive=False),
     prompt="Select license type",
     default="MIT",
     help="License type",
     show_choices=True,
+)
+@click.option(
+    "--company-name",
+    default="",
+    prompt="[OPTIONAL] Please enter your company name",
+    help="Company or organization name (optional, for license)",
 )
 def init(
     destination: str,
@@ -42,15 +48,19 @@ def init(
     author_email: str,
     description: str,
     license: str,
+    company_name: str,
 ):
     """Create new ETL pipeline architecture"""
 
-    # Validate all parameters at once
-    validate_params(name=name, author_email=author_email, license=license)
+    click.echo("\n🚀 Initializing new pypeline project...\n")
+
+    # Validate specific input params
+    click.echo("✓ Validating inputs...")
+    validate_params(name=name, author_email=author_email)
 
     path = resolve_path(destination=destination, action="creating project", name=name)
 
-    click.echo(f"Creating the {name} project at {path}")
+    click.echo(f"\n📁 Creating project '{name}' at: {path}")
 
     ctx = ProjectContext(path, init=True)
 
@@ -62,5 +72,19 @@ def init(
             author_email=author_email,
             description=description,
             license=license,
+            company_name=company_name,
             path=path,
+        )
+
+        click.echo(f"\n✅ Successfully created project '{name}'!")
+        click.echo("\n📝 Project details:")
+        click.echo(f"  • Name: {name}")
+        click.echo(f"  • Author: {author_name} <{author_email}>")
+        click.echo(f"  • Description: {description}")
+        click.echo(f"  • License: {license}")
+        click.echo("\n📂 Next steps:")
+        click.echo(f"  1. cd {path}")
+        click.echo("  2. Edit dependencies.py to manage your project dependencies")
+        click.echo(
+            "  3. Run 'pypeline sync-deps' to sync dependencies to pyproject.toml"
         )

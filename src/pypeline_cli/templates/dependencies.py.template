@@ -18,7 +18,6 @@ to update your pyproject.toml file.
 # ============================================================================
 BASE_DEPENDENCIES = [
     "snowflake-snowpark-python>=1.42.0",
-    "pyspark>=4.0.1",
     "numpy>=2.3.4",
     "pandas>=2.3.3",
     "build==1.3.0",
