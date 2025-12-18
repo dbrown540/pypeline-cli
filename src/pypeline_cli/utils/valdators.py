@@ -69,3 +69,70 @@ def validate_project_name(name: str) -> tuple[bool, str]:
         return False, f"'{name}' is a reserved name on Windows"
 
     return True, ""
+
+
+def validate_email(email: str) -> tuple[bool, str]:
+    """
+    Validate email address format.
+
+    Returns: (is_valid, error_message)
+    """
+    if not email:
+        return False, "Email cannot be empty"
+
+    # Basic email pattern validation
+    # Allows letters, numbers, dots, hyphens, underscores before @
+    # Domain must have at least one dot and valid TLD
+    pattern = r"^[\w\.-]+@[\w\.-]+\.\w{2,}$"
+
+    if not re.match(pattern, email):
+        return False, f"'{email}' is not a valid email format"
+
+    # Additional checks
+    if email.count("@") != 1:
+        return False, "Email must contain exactly one @ symbol"
+
+    local, domain = email.split("@")
+
+    if not local:
+        return False, "Email local part (before @) cannot be empty"
+
+    if not domain:
+        return False, "Email domain (after @) cannot be empty"
+
+    if len(email) > 254:  # RFC 5321
+        return False, "Email address too long (max 254 characters)"
+
+    return True, ""
+
+
+# Mapping of parameter names to their validator functions
+PARAM_VALIDATORS = {
+    "name": validate_project_name,
+    "project_name": validate_project_name,
+    "author_email": validate_email,
+    "email": validate_email,
+    # Add more validators as needed
+}
+
+
+def validate_params(**params) -> None:
+    """
+    Validate multiple parameters based on their names.
+
+    Automatically uses the appropriate validator function based on parameter name.
+    Raises click.BadParameter if validation fails.
+
+    Example:
+        validate_params(name="my-project", author_email="user@example.com")
+    """
+    import click
+
+    for param_name, value in params.items():
+        validator_func = PARAM_VALIDATORS.get(param_name)
+        if validator_func:
+            is_valid, error_message = validator_func(value)
+            if not is_valid:
+                raise click.BadParameter(
+                    error_message, param_hint=f"'--{param_name.replace('_', '-')}'"
+                )

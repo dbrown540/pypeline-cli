@@ -45,3 +45,15 @@ class ProjectContext:
     @property
     def tests_path(self) -> Path:
         return self.project_root / "tests"
+
+    @property
+    def dependencies_path(self) -> Path:
+        return self.project_root / "dependencies.py"
+
+    @property
+    def dependencies_template(self) -> Path:
+        return (
+            Path(__file__).parent.parent.parent
+            / "templates"
+            / "dependencies.py.template"
+        )
