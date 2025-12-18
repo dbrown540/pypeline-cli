@@ -1,5 +1,10 @@
 from pathlib import Path
-import tomli
+import sys
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 
 class ProjectContext:
@@ -28,7 +33,7 @@ class ProjectContext:
         """Check if pyproject.toml is a pypeline-managed project"""
         try:
             with open(toml_path, "rb") as f:
-                data = tomli.load(f)
+                data = tomllib.load(f)
             return "tool" in data and "pypeline" in data.get("tool", {})
         except Exception:
             # If we can't read/parse the toml, it's not a pypeline project
@@ -43,8 +48,8 @@ class ProjectContext:
         return self.project_root / "src"
 
     @property
-    def tests_path(self) -> Path:
-        return self.project_root / "tests"
+    def import_folder(self) -> Path:
+        return self.src_path / self.project_root.name
 
     @property
     def dependencies_path(self) -> Path:
@@ -64,11 +69,11 @@ class ProjectContext:
 
     @property
     def pipelines_folder_path(self) -> Path:
-        return self.project_root / "pipeilnes"
+        return self.import_folder / "pipeilnes"
 
     @property
     def schemas_folder_path(self) -> Path:
-        return self.project_root / "schemas"
+        return self.import_folder / "schemas"
 
     @property
     def integration_tests_folder_path(self) -> Path:
@@ -76,7 +81,7 @@ class ProjectContext:
 
     @property
     def project_utils_folder_path(self) -> Path:
-        return self.project_root / "utils"
+        return self.import_folder / "utils"
 
     @property
     def columns_file(self) -> Path:
@@ -109,3 +114,19 @@ class ProjectContext:
     @property
     def tables_file(self) -> Path:
         return self.project_utils_folder_path / "tables.py"
+
+    @property
+    def basic_test_file(self) -> Path:
+        return self.integration_tests_folder_path / "basic_test.py"
+
+    @property
+    def gitignore_file(self) -> Path:
+        return self.project_root / ".gitignore"
+
+    @property
+    def init_readme_file(self) -> Path:
+        return self.project_root / "README.md"
+
+    @property
+    def _init_file(self) -> Path:
+        return self.import_folder / "__init__.py"

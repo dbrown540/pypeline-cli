@@ -84,7 +84,8 @@ def init(
         click.echo(f"  • License: {license}")
         click.echo("\n📂 Next steps:")
         click.echo(f"  1. cd {path}")
-        click.echo("  2. Edit dependencies.py to manage your project dependencies")
-        click.echo(
-            "  3. Run 'pypeline sync-deps' to sync dependencies to pyproject.toml"
-        )
+        click.echo("  2. python -m venv .venv")
+        click.echo("  3. .venv\\Scripts\\activate  # Windows")
+        click.echo("     source .venv/bin/activate  # macOS/Linux")
+        click.echo("  4. pip install -e .")
+        click.echo("  5. pypeline sync-deps")

@@ -5,6 +5,7 @@ from .managers.toml_manager import TOMLManager
 from .managers.dependencies_manager import DependenciesManager
 from .managers.license_manager import LicenseManager
 from .managers.scaffolding_manager import ScaffoldingManager
+from .managers.git_manager import create_git_repo
 from ..config import INIT_SCAFFOLD_FILES
 
 
@@ -20,6 +21,20 @@ def create_project(
 ):
     # Create the project root
     Path.mkdir(path, parents=False, exist_ok=False)
+
+    create_git_repo(path)
+
+    # Create .gitattributes for consistent line endings
+    gitattributes_content = """# Ensure line endings are consistent
+* text=auto
+*.py text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+"""
+    (path / ".gitattributes").write_text(gitattributes_content.strip())
 
     # Create TOML file
     toml_manager = TOMLManager(
@@ -52,6 +67,8 @@ def create_project(
     scaffolding_manager = ScaffoldingManager(ctx=ctx)
     scaffolding_manager.create_folder_scaffolding(
         [
+            ctx.src_path,
+            ctx.import_folder,
             ctx.pipelines_folder_path,
             ctx.schemas_folder_path,
             ctx.integration_tests_folder_path,

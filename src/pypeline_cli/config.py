@@ -77,4 +77,20 @@ INIT_SCAFFOLD_FILES = [
         template_name=PATH_TO_INIT_TEMPLATES / "snowflake_utils.py.template",
         destination_property="snowflake_utils_file",
     ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / "basic_test.py.template",
+        destination_property="basic_test_file",
+    ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / ".gitignore.template",
+        destination_property="gitignore_file",
+    ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / "README.md.template",
+        destination_property="init_readme_file",
+    ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / "_init.py.template",
+        destination_property="_init_file",
+    ),
 ]

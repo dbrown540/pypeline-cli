@@ -32,7 +32,7 @@ class TOMLManager:
                 "authors": [{"name": author_name, "email": author_email}],
                 "description": description,
                 "readme": "README.md",
-                "requires-python": ">3.9",
+                "requires-python": ">=3.10",
                 "license": license,
                 "dependencies": DEFAULT_DEPENDENCIES.copy(),
             },
@@ -44,7 +44,7 @@ class TOMLManager:
                     "build": {
                         "hooks": {
                             "vcs": {
-                                "version-file": "src/pypeline_cli/_version.py",
+                                "version-file": f"src/{name}/_version.py",
                             },
                         },
                     },
