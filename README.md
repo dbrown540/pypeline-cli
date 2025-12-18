@@ -64,6 +64,21 @@ Creates a new data pipeline project with a complete structure.
 - `--company-name` - Company/organization name (optional, for license)
 
 **What it creates:**
+```mermaid
+graph TD
+    A[pypeline init] --> B[Create project directory]
+    B --> C[Initialize git repository]
+    C --> D[Create .gitattributes]
+    D --> E[Create pyproject.toml]
+    E --> F[Create dependencies.py]
+    F --> G[Create LICENSE file]
+    G --> H[Create folder structure<br/>src/project_name/pipelines/<br/>src/project_name/schemas/<br/>src/project_name/utils/<br/>tests/]
+    H --> I[Create utilities in utils/<br/>databases.py, tables.py<br/>etl.py, date_parser.py]
+    I --> J[Create .gitignore & README]
+    J --> K[Commit to git]
+```
+
+**Project Structure Created:**
 - Complete project structure with src-layout
 - `pyproject.toml` with hatch-vcs for versioning
 - Git repository with initial commit
@@ -110,15 +125,19 @@ my-etl-project/
 │   └── my_etl_project/
 │       ├── __init__.py
 │       ├── _version.py          # Auto-generated from git tags
-│       ├── dependencies.py      # USER EDITABLE - Manage dependencies here
-│       ├── databases.py         # USER EDITABLE - Database constants
-│       ├── tables.py           # USER EDITABLE - Table configurations
-│       ├── etl.py              # FRAMEWORK - Snowpark session manager
-│       └── date_parser.py      # FRAMEWORK - DateTime utilities
-├── pyproject.toml              # Project configuration
-├── LICENSE                     # Your chosen license
-├── README.md                   # Project readme
-└── .gitignore                  # Python gitignore
+│       ├── pipelines/           # Your pipeline implementations
+│       ├── schemas/             # Data schema definitions
+│       └── utils/               # Utility modules (created here)
+│           ├── databases.py     # USER EDITABLE - Database constants
+│           ├── tables.py        # USER EDITABLE - Table configurations
+│           ├── etl.py           # FRAMEWORK - Snowpark session manager
+│           └── date_parser.py   # FRAMEWORK - DateTime utilities
+├── tests/                       # Integration tests
+├── dependencies.py              # USER EDITABLE - Manage dependencies here
+├── pyproject.toml               # Project configuration
+├── LICENSE                      # Your chosen license
+├── README.md                    # Project readme
+└── .gitignore                   # Python gitignore
 ```
 
 ### Understanding the Templates
