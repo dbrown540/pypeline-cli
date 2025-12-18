@@ -287,12 +287,9 @@ Automatic initialization with:
 
 ## Requirements
 
-- Python 3.9+ (for pypeline-cli itself)
+- Python 3.10+
 - Git (for version management)
 - pipx (recommended for installation)
-
-Generated projects require:
-- Python 3.10+ (Snowflake compatibility)
 
 ## License
 
