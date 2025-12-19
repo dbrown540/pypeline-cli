@@ -158,7 +158,7 @@ pypeline init \
 ```
 
 **What this creates:**
-- Complete project structure with src-layout
+- Complete project structure (flat package layout)
 - Git repository with initial commit
 - `pyproject.toml` configured for Python 3.12+
 - Utility modules (ETL, Logger, TableConfig, etc.)
@@ -175,7 +175,7 @@ This creates a `.venv` virtual environment and installs all dependencies.
 
 ### Step 3: Configure Your Databases and Tables
 
-Edit `src/customer_analytics/utils/databases.py`:
+Edit `customer_analytics/utils/databases.py`:
 
 ```python
 class Database:
@@ -189,7 +189,7 @@ class Schema:
     ANALYTICS = "ANALYTICS"
 ```
 
-Edit `src/customer_analytics/utils/tables.py`:
+Edit `customer_analytics/utils/tables.py`:
 
 ```python
 from .databases import Database, Schema
@@ -228,7 +228,8 @@ pypeline create-pipeline --name customer-segmentation
 
 **What this creates:**
 ```
-src/customer_analytics/pipelines/customer_segmentation/
+customer_analytics/pipelines/customer_segmentation/
+├── __init__.py                        # Package marker
 ├── customer_segmentation_runner.py   # Main orchestrator
 ├── config.py                          # Pipeline-specific config
 ├── README.md                          # Documentation
@@ -261,7 +262,7 @@ Each processor is scaffolded with:
 
 ### Step 6: Implement Processor Logic
 
-Edit `src/customer_analytics/pipelines/customer_segmentation/processors/sales_extractor_processor.py`:
+Edit `customer_analytics/pipelines/customer_segmentation/processors/sales_extractor_processor.py`:
 
 ```python
 from typing import Final
@@ -368,7 +369,7 @@ class SalesExtractorProcessor:
 
 ### Step 7: Wire Processors in Pipeline Runner
 
-Edit `src/customer_analytics/pipelines/customer_segmentation/customer_segmentation_runner.py`:
+Edit `customer_analytics/pipelines/customer_segmentation/customer_segmentation_runner.py`:
 
 ```python
 from pathlib import Path
@@ -541,7 +542,7 @@ pypeline init \
 - `pyproject.toml` with either:
   - Git-based versioning (if `--git`): Uses hatch-vcs, version from git tags
   - Manual versioning (if `--no-git`): Static version "0.1.0"
-- Utility modules in `src/{project}/utils/`
+- Utility modules in `{project}/utils/`
 - Test directory structure
 - `dependencies.py` for dependency management
 - LICENSE file
@@ -709,15 +710,14 @@ When extracted, the ZIP contains your project files at the root level:
 ```
 my_project-0.1.0.zip
 ├── pyproject.toml           # At root - required by Snowflake
-├── dependencies.py
-├── LICENSE
-├── README.md
-├── src/
-│   └── my_project/
-│       ├── __init__.py
-│       ├── pipelines/
-│       └── utils/
-└── tests/
+├── my_project/              # Package at root - importable
+│   ├── __init__.py
+│   ├── pipelines/
+│   │   └── __init__.py
+│   ├── schemas/
+│   │   └── __init__.py
+│   └── utils/
+│       └── __init__.py
 ```
 
 **Why This Structure Matters:**
@@ -772,24 +772,23 @@ When you run `pypeline init --name my_pipeline`, it creates:
 
 ```
 my_pipeline/
-├── src/
-│   └── my_pipeline/
-│       ├── __init__.py              # Auto-generated imports
-│       ├── _version.py              # Git tag-based versioning
-│       ├── pipelines/               # Your pipeline implementations
-│       │   └── __init__.py
-│       ├── schemas/                 # Data schema definitions
-│       │   └── __init__.py
-│       └── utils/                   # Utility modules
-│           ├── __init__.py
-│           ├── databases.py         # ✏️ USER EDITABLE - Database constants
-│           ├── tables.py            # ✏️ USER EDITABLE - Table configurations
-│           ├── etl.py               # ⚙️ FRAMEWORK - Snowpark session manager
-│           ├── logger.py            # ⚙️ FRAMEWORK - Structured logging
-│           ├── decorators.py        # ⚙️ FRAMEWORK - Timing, table checks
-│           ├── date_parser.py       # ⚙️ FRAMEWORK - DateTime utilities
-│           ├── snowflake_utils.py   # ⚙️ FRAMEWORK - Snowflake helpers
-│           └── columns.py           # ⚙️ FRAMEWORK - Column utilities
+├── my_pipeline/                     # Package directory (no src/ folder)
+│   ├── __init__.py              # Auto-generated imports
+│   ├── _version.py              # Git tag-based versioning (if using --git)
+│   ├── pipelines/               # Your pipeline implementations
+│   │   └── __init__.py
+│   ├── schemas/                 # Data schema definitions
+│   │   └── __init__.py
+│   └── utils/                   # Utility modules
+│       ├── __init__.py
+│       ├── databases.py         # ✏️ USER EDITABLE - Database constants
+│       ├── tables.py            # ✏️ USER EDITABLE - Table configurations
+│       ├── etl.py               # ⚙️ FRAMEWORK - Snowpark session manager
+│       ├── logger.py            # ⚙️ FRAMEWORK - Structured logging
+│       ├── decorators.py        # ⚙️ FRAMEWORK - Timing, table checks
+│       ├── date_parser.py       # ⚙️ FRAMEWORK - DateTime utilities
+│       ├── snowflake_utils.py   # ⚙️ FRAMEWORK - Snowflake helpers
+│       └── columns.py           # ⚙️ FRAMEWORK - Column utilities
 ├── tests/                           # Integration tests
 │   └── test_basic.py
 ├── dependencies.py                  # ✏️ USER EDITABLE - Dependency management
@@ -842,7 +841,7 @@ pypeline create-processor --name inventory-check --pipeline order-fulfillment
 pypeline create-processor --name fulfillment-logic --pipeline order-fulfillment
 
 # 3. Configure table configs in pipeline's config.py
-# Edit: src/my_project/pipelines/order_fulfillment/config.py
+# Edit: my_project/pipelines/order_fulfillment/config.py
 
 # 4. Implement each processor
 # Edit: processors/orders_extractor_processor.py
@@ -1355,7 +1354,7 @@ class OrderFulfillmentPipeline:
 
 ## Built-in Utilities
 
-pypeline-cli provides several utility modules out-of-the-box. These are auto-generated in `src/{project}/utils/`.
+pypeline-cli provides several utility modules out-of-the-box. These are auto-generated in `{project}/utils/`.
 
 ### ETL Singleton
 

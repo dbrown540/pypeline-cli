@@ -63,9 +63,9 @@ The codebase uses a manager pattern where specialized managers handle different 
 
 - **LicenseManager** (`core/managers/license_manager.py`): Creates LICENSE files from templates in `templates/licenses/`, performing variable substitution for author name, year, etc. Uses `string.Template` for variable substitution.
 
-- **ScaffoldingManager** (`core/managers/scaffolding_manager.py`): Creates folder structure and copies template files to destination paths using the `ScaffoldFile` dataclass configuration.
+- **ScaffoldingManager** (`core/managers/scaffolding_manager.py`): Creates folder structure and copies template files to destination paths using the `ScaffoldFile` dataclass configuration. Automatically creates `__init__.py` files in Python package folders (pipelines/, utils/, schemas/) to ensure proper package structure.
 
-- **PipelineManager** (`core/managers/pipeline_manager.py`): Creates pipeline folder structures with runner, config, tests, and processors directories. Uses `string.Template` for variable substitution in templates. Automatically registers pipeline classes in the package's `__init__.py` for top-level imports.
+- **PipelineManager** (`core/managers/pipeline_manager.py`): Creates pipeline folder structures with runner, config, tests, and processors directories. Uses `string.Template` for variable substitution in templates. Automatically creates `__init__.py` in each pipeline folder and registers pipeline classes in the package's `__init__.py` for top-level imports.
 
 - **ProcessorManager** (`core/managers/processor_manager.py`): Creates processor classes within existing pipelines. Generates processor file with Extract/Transform pattern, test file with pytest fixtures, and auto-registers import in pipeline runner file. Uses `string.Template` for variable substitution.
 
@@ -82,7 +82,7 @@ The `init` command flow:
    - Manual versioning (if `--no-git` flag used): Static version "0.1.0", no hatch-vcs dependency
 5. DependenciesManager creates `dependencies.py` from template
 6. LicenseManager creates LICENSE file
-7. ScaffoldingManager creates folder structure (project_name/, tests/, pipelines/, schemas/, utils/)
+7. ScaffoldingManager creates folder structure (project_name/, tests/, pipelines/, schemas/, utils/) with `__init__.py` files in package folders
 8. ScaffoldingManager copies all template files from `config.INIT_SCAFFOLD_FILES`
 
 The `sync-deps` command flow:
@@ -95,6 +95,7 @@ The `create-pipeline` command flow:
 2. Converts to PascalCase with "Pipeline" suffix (e.g., `beneficiary-claims` → `BeneficiaryClaimsPipeline`)
 3. ProjectContext searches up tree for pypeline project (init=False mode)
 4. Creates pipeline folder structure:
+   - `pipelines/{name}/__init__.py` - Package marker (auto-created)
    - `pipelines/{name}/{name}_runner.py` - Main pipeline orchestrator
    - `pipelines/{name}/config.py` - Pipeline-specific configuration with TableConfig imports
    - `pipelines/{name}/README.md` - Pipeline documentation template
