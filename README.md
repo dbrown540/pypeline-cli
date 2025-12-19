@@ -97,7 +97,9 @@ pypeline install
 ```
 
 **What it does:**
-- Creates `.venv` directory
+- Detects Python 3.12 or 3.13 on your system
+- Creates `.venv` directory with compatible Python version
+- Upgrades pip to the latest version
 - Installs the project in editable mode
 - Installs all dependencies from `pyproject.toml`
 
@@ -114,6 +116,29 @@ pypeline sync-deps
 - Edit dependencies in a user-friendly Python file (`dependencies.py`)
 - Automatically updates `pyproject.toml` with proper formatting
 - Validates dependency specifications
+
+### `pypeline create-pipeline`
+
+Creates a new pipeline within an existing pypeline project.
+
+**Usage:**
+```bash
+pypeline create-pipeline --name beneficiary-claims
+```
+
+**What it creates:**
+- `pipelines/beneficiary_claims/` folder structure
+- `beneficiary_claims_runner.py` - Main pipeline orchestrator with run(), pipeline(), and processor methods
+- `config.py` - Pipeline-specific configuration
+- `README.md` - Pipeline documentation template
+- `processors/` - Directory for processor classes
+- `tests/` - Integration tests directory
+- Auto-registers pipeline class in package `__init__.py` for top-level imports
+
+**Naming:**
+- Accepts hyphens, underscores, or spaces (e.g., `beneficiary-claims`, `beneficiary_claims`, `CLAIMS`)
+- Normalizes to lowercase with underscores for folder/file names
+- Generates PascalCase class name with "Pipeline" suffix (e.g., `BeneficiaryClaimsPipeline`)
 
 ## Generated Project Structure
 
@@ -278,7 +303,16 @@ pypeline install
 - Create your ETL scripts using the provided utilities
 - Use `ETL.get_session()` for Snowpark operations
 
-### 5. Version and Release
+### 5. Create Pipelines
+```bash
+# Create a new pipeline
+pypeline create-pipeline --name beneficiary-claims
+
+# This creates the pipeline structure and registers it
+# Now you can import it: from my_project import BeneficiaryClaimsPipeline
+```
+
+### 6. Version and Release
 ```bash
 git add .
 git commit -m "Add feature"
@@ -288,13 +322,75 @@ git push origin main --tags
 
 Version is automatically determined from git tags via hatch-vcs.
 
+## Pipeline Development Pattern
+
+pypeline-cli generates pipelines that follow a specific architectural pattern:
+
+### Pipeline Runner Structure
+
+```python
+class BeneficiaryClaimsPipeline:
+    def __init__(self):
+        self.logger = Logger()
+        self.etl = ETL()
+
+    @time_function("BeneficiaryClaimsPipeline.run")
+    def run(self, _write: bool = False):
+        """Entry point with timing decorator"""
+        self.pipeline(_write)
+
+    def pipeline(self, _write: bool):
+        """Orchestrates processors and conditional write"""
+        df = self.run_processors()
+        if _write:
+            self._write_to_snowflake(df, ...)
+
+    def run_processors(self) -> DataFrame:
+        """Instantiates and runs processor classes"""
+        # Import processors from ./processors/
+        # Each processor handles extraction in __init__
+        # Each processor has process() method for transformations
+        pass
+
+    def _write_to_snowflake(self, df, write_mode, table_path):
+        """Uses df.write.mode().save_as_table()"""
+        pass
+```
+
+### Processor Pattern
+
+Processors (created by users in the `processors/` directory):
+- Handle data extraction in `__init__` using TableConfig
+- Implement `process()` method as orchestrator for transformations
+- Use private methods for atomic transformation steps
+- Return DataFrames
+
+### Auto-Registration
+
+Pipeline classes are automatically added to your package's `__init__.py`:
+
+```python
+# Generated in src/my_project/__init__.py
+from .pipelines.beneficiary_claims.beneficiary_claims_runner import BeneficiaryClaimsPipeline
+
+__all__ = ["BeneficiaryClaimsPipeline"]
+```
+
+This allows top-level imports:
+```python
+from my_project import BeneficiaryClaimsPipeline, EnrollmentPipeline
+
+pipeline = BeneficiaryClaimsPipeline()
+pipeline.run(_write=True)
+```
+
 ## Project Configuration
 
 ### pyproject.toml
 
 Generated projects use:
 - **Build System**: hatchling with hatch-vcs
-- **Python Version**: >=3.10 (Snowflake compatible)
+- **Python Version**: >=3.12,<3.14 (Snowflake compatible)
 - **Versioning**: Git tag-based (no manual version management)
 
 ### Git Configuration
@@ -306,7 +402,8 @@ Automatic initialization with:
 
 ## Requirements
 
-- Python 3.10+
+- **Python 3.12 or 3.13** (required for Snowflake compatibility)
+  - Note: Python 3.14+ is not yet supported by snowflake-snowpark-python
 - Git (for version management)
 - pipx (recommended for installation)
 
