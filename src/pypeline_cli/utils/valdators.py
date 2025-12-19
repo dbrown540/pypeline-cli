@@ -109,12 +109,67 @@ def validate_email(email: str) -> tuple[bool, str]:
 def validate_license(license: str) -> tuple[bool, str]: ...
 
 
+def validate_pipeline_name(name: str) -> tuple[bool, str]:
+    """
+    Validate and normalize pipeline name.
+
+    Accepts alphanumeric characters, hyphens, and underscores.
+    Converts to normalized form (lowercase, underscores).
+
+    Returns:
+        (is_valid, normalized_name_or_error_message)
+
+    Note:
+        Unlike validate_project_name, this returns the normalized name
+        on success rather than empty string, as the command needs the normalized value.
+    """
+    if not name:
+        return False, "Pipeline name cannot be empty"
+
+    # Strip whitespace
+    name = name.strip()
+
+    # Check length
+    if len(name) > 100:  # Reasonable limit for pipeline names
+        return False, "Pipeline name too long (max 100 characters)"
+
+    # Allow only alphanumeric, hyphens, and underscores
+    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+        return False, (
+            f"'{name}' contains invalid characters. "
+            "Use only letters, numbers, hyphens, and underscores"
+        )
+
+    # Must start with a letter or underscore (Python identifier requirement)
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False, "Pipeline name must start with a letter or underscore"
+
+    # Normalize the name
+    from .name_converter import normalize_name
+
+    normalized = normalize_name(name)
+
+    # Verify normalized name is a valid Python identifier
+    if not normalized.isidentifier():
+        return False, f"'{name}' cannot be converted to a valid Python identifier"
+
+    # Check for Python keywords
+    import keyword
+
+    if keyword.iskeyword(normalized):
+        return False, f"'{normalized}' is a Python keyword and cannot be used"
+
+    # Return success with normalized name
+    return True, normalized
+
+
 # Mapping of parameter names to their validator functions
 PARAM_VALIDATORS = {
     "name": validate_project_name,
     "project_name": validate_project_name,
     "author_email": validate_email,
     "email": validate_email,
+    "pipeline_name": validate_pipeline_name,
 }
 
 

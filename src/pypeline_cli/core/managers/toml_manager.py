@@ -1,8 +1,13 @@
+import sys
 import click
 import tomli_w
-import tomllib
 
 from typing import List
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from .project_context import ProjectContext
 from ...config import DEFAULT_DEPENDENCIES

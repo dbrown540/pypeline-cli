@@ -20,9 +20,14 @@ def install():
         click.echo(f"✓ Virtual environment already exists at {venv_path}")
     else:
         click.echo("📦 Creating virtual environment...")
-        subprocess.run(
-            ["python", "-m", "venv", ".venv"], cwd=ctx.project_root, check=True
-        )
+        if platform.system == "Windows":
+            subprocess.run(
+                ["python", "-m", "venv", ".venv"], cwd=ctx.project_root, check=True
+            )
+        else:
+            subprocess.run(
+                ["python3", "-m", "venv", ".venv"], cwd=ctx.project_root, check=True
+            )
         click.echo(f"✓ Created virtual environment at {venv_path}")
 
     # Determine pip path based on OS

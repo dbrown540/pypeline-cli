@@ -69,7 +69,7 @@ class ProjectContext:
 
     @property
     def pipelines_folder_path(self) -> Path:
-        return self.import_folder / "pipeilnes"
+        return self.import_folder / "pipelines"
 
     @property
     def schemas_folder_path(self) -> Path:

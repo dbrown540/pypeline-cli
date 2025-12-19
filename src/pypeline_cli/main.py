@@ -2,6 +2,8 @@ import click
 
 from .commands.init import init
 from .commands.sync_deps import sync_deps
+from .commands.install import install
+from .commands.create_pipeline import create_pipeline
 
 
 @click.group()
@@ -11,3 +13,5 @@ def cli():
 
 cli.add_command(init)
 cli.add_command(sync_deps)
+cli.add_command(install)
+cli.add_command(create_pipeline)
