@@ -168,21 +168,60 @@ class ProcessorManager:
 
         lines = content.splitlines(keepends=True)
 
-        # Find insertion point: after last import from .processors or after other imports
-        import_insert_index = None
-        last_import_index = 0
+        # Skip past module docstring
+        i = 0
+        in_docstring = False
+        docstring_char = None
 
-        for i, line in enumerate(lines):
-            # Track last import line
-            if line.strip().startswith("from") or line.strip().startswith("import"):
-                last_import_index = i
+        # Skip shebang and encoding declarations if present
+        while i < len(lines) and (lines[i].startswith("#") or not lines[i].strip()):
+            i += 1
 
-            # Prefer inserting after existing processor imports
-            if line.strip().startswith("from .processors."):
-                import_insert_index = i + 1
+        # Check for docstring (""" or ''')
+        if i < len(lines):
+            stripped = lines[i].strip()
+            if stripped.startswith('"""') or stripped.startswith("'''"):
+                docstring_char = stripped[:3]
+                # Check if it's a single-line docstring
+                if stripped.endswith(docstring_char) and len(stripped) > 6:
+                    i += 1
+                else:
+                    # Multi-line docstring
+                    in_docstring = True
+                    i += 1
+                    while i < len(lines) and in_docstring:
+                        if docstring_char in lines[i]:
+                            in_docstring = False
+                        i += 1
 
-        # If no processor imports found, add after last import
-        if import_insert_index is None:
+        # Skip blank lines after docstring
+        while i < len(lines) and not lines[i].strip():
+            i += 1
+
+        # Now find the right place in the import section
+        import_insert_index = i
+        last_processor_import_index = None
+        last_import_index = None
+
+        for idx in range(i, len(lines)):
+            line = lines[idx].strip()
+
+            # Stop when we hit non-import content (class, def, etc.)
+            if line and not line.startswith(("from", "import", "#")):
+                break
+
+            # Track imports
+            if line.startswith("from") or line.startswith("import"):
+                last_import_index = idx
+
+                # Specifically track processor imports
+                if line.startswith("from .processors."):
+                    last_processor_import_index = idx
+
+        # Insert after last processor import, or after last import, or at start of import section
+        if last_processor_import_index is not None:
+            import_insert_index = last_processor_import_index + 1
+        elif last_import_index is not None:
             import_insert_index = last_import_index + 1
 
         # Insert the import
