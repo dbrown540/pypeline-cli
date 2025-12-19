@@ -52,19 +52,20 @@ def install():
         )
         click.echo(f"✓ Created virtual environment at {venv_path}")
 
-    # Determine pip path based on OS
+    # Determine Python executable path based on OS
     if platform.system() == "Windows":
-        pip_path = venv_path / "Scripts" / "pip.exe"
+        python_exe = venv_path / "Scripts" / "python.exe"
     else:
-        pip_path = venv_path / "bin" / "pip"
+        python_exe = venv_path / "bin" / "python"
 
-    if not pip_path.exists():
-        raise click.ClickException(f"pip not found at {pip_path}")
+    if not python_exe.exists():
+        raise click.ClickException(f"Python executable not found at {python_exe}")
 
     # Upgrade pip to latest version (required for modern editable installs)
+    # Use 'python -m pip' instead of calling pip directly (Windows compatibility)
     click.echo("\n🔄 Upgrading pip to latest version...\n")
     upgrade_result = subprocess.run(
-        [str(pip_path), "install", "--upgrade", "pip"],
+        [str(python_exe), "-m", "pip", "install", "--upgrade", "pip"],
         cwd=ctx.project_root,
     )
 
@@ -74,10 +75,10 @@ def install():
 
     click.echo("\n✓ pip upgraded successfully")
 
-    # Install project in editable mode using the venv's pip
+    # Install project in editable mode using 'python -m pip' (Windows compatibility)
     click.echo("\n🔧 Installing project dependencies...\n")
     result = subprocess.run(
-        [str(pip_path), "install", "-e", "."],
+        [str(python_exe), "-m", "pip", "install", "-e", "."],
         cwd=ctx.project_root,
     )
 
