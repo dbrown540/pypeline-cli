@@ -75,9 +75,11 @@ The codebase uses a manager pattern where specialized managers handle different 
 
 The `init` command flow:
 1. Creates ProjectContext with `init=True` (uses provided path, doesn't search for existing project)
-2. Creates project directory and initializes git
-3. Creates `.gitattributes` for consistent line endings
-4. TOMLManager creates `pyproject.toml` with hatch-vcs configuration
+2. Optionally creates project directory and initializes git (controlled by `--git/--no-git` flag, default: disabled)
+3. If git enabled, creates `.gitattributes` for consistent line endings
+4. TOMLManager creates `pyproject.toml` with either:
+   - Git-based versioning (if `--git` flag used): Uses hatch-vcs, dynamic version from git tags
+   - Manual versioning (if `--no-git` flag used): Static version "0.1.0", no hatch-vcs dependency
 5. DependenciesManager creates `dependencies.py` from template
 6. LicenseManager creates LICENSE file
 7. ScaffoldingManager creates folder structure (src, tests, pipelines, schemas, utils)
@@ -112,6 +114,17 @@ The `create-processor` command flow:
 6. Creates `processors/tests/` subdirectory if it doesn't exist
 7. ProcessorManager auto-registers import in `{pipeline}_runner.py`
 8. Import statement inserted after existing processor imports (or after last import if first processor)
+
+The `build` command flow:
+1. ProjectContext searches up tree for pypeline project (init=False mode)
+2. Reads `pyproject.toml` to get project name and version
+3. Cleans existing `dist/snowflake/` directory
+4. Creates ZIP archive of project files using Python's `zipfile` module
+5. Adds files relative to project root (ensuring `pyproject.toml` is at ZIP root level)
+6. Excludes build artifacts (.venv, dist, __pycache__, .git, etc.)
+7. Verifies `pyproject.toml` is at ZIP root and displays upload instructions
+
+**Critical**: The ZIP must have `pyproject.toml` at root level (not nested in a folder) for Snowflake to properly import the package. The build command ensures this by adding all files relative to the project root.
 
 ### Template System
 
@@ -178,7 +191,8 @@ pypeline-cli/
 │   │   ├── sync_deps.py     # pypeline sync-deps
 │   │   ├── install.py       # pypeline install
 │   │   ├── create_pipeline.py   # pypeline create-pipeline
-│   │   └── create_processor.py  # pypeline create-processor
+│   │   ├── create_processor.py  # pypeline create-processor
+│   │   └── build.py         # pypeline build
 │   ├── core/
 │   │   ├── create_project.py     # Orchestrates project creation
 │   │   └── managers/             # Manager classes for different concerns

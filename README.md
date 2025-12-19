@@ -533,16 +533,19 @@ pypeline init \
 - `--license TEXT` - License type (required)
   - Available: `mit`, `apache-2.0`, `gpl-3.0`, `gpl-2.0`, `lgpl-2.1`, `bsd-2-clause`, `bsd-3-clause`, `bsl-1.0`, `cc0-1.0`, `epl-2.0`, `agpl-3.0`, `mpl-2.0`, `unlicense`, `proprietary`
 - `--company-name TEXT` - Company/organization name (optional, for license)
+- `--git / --no-git` - Initialize git repository (default: disabled)
 
 **What it creates:**
 - Project directory with src-layout
-- Git repository with initial commit
-- `pyproject.toml` with hatch-vcs versioning
+- Git repository with initial commit (if `--git` flag used)
+- `pyproject.toml` with either:
+  - Git-based versioning (if `--git`): Uses hatch-vcs, version from git tags
+  - Manual versioning (if `--no-git`): Static version "0.1.0"
 - Utility modules in `src/{project}/utils/`
 - Test directory structure
 - `dependencies.py` for dependency management
 - LICENSE file
-- `.gitignore` and `.gitattributes`
+- `.gitignore` and optionally `.gitattributes` (if using git)
 
 ---
 
@@ -676,6 +679,93 @@ pypeline install
 
 ---
 
+### `pypeline build`
+
+Creates a Snowflake-compatible ZIP archive of your project with `pyproject.toml` at the root level.
+
+**Usage:**
+```bash
+cd your-project
+pypeline build
+```
+
+**What it does:**
+1. Finds project root and reads `pyproject.toml` for project name and version
+2. Cleans existing `dist/snowflake/` directory
+3. Creates ZIP archive with all project files
+4. Ensures `pyproject.toml` is at ZIP root level (critical for Snowflake)
+5. Excludes build artifacts, venv, and cache files
+6. Verifies structure and displays upload instructions
+
+**Output:**
+```
+dist/
+└── snowflake/
+    └── my_project-0.1.0.zip    # Snowflake-ready ZIP
+```
+
+**ZIP Contents:**
+When extracted, the ZIP contains your project files at the root level:
+```
+my_project-0.1.0.zip
+├── pyproject.toml           # At root - required by Snowflake
+├── dependencies.py
+├── LICENSE
+├── README.md
+├── src/
+│   └── my_project/
+│       ├── __init__.py
+│       ├── pipelines/
+│       └── utils/
+└── tests/
+```
+
+**Why This Structure Matters:**
+Snowflake stages are strict about ZIP structure:
+- ✅ Correct: `pyproject.toml` at root → Snowflake can import the package
+- ❌ Wrong: `project_folder/pyproject.toml` → Snowflake import fails
+
+pypeline build ensures the correct structure automatically.
+
+**Excluded from ZIP:**
+- `.venv/` - Virtual environment
+- `dist/` - Distribution files
+- `__pycache__/`, `.pytest_cache/` - Python caches
+- `.git/` - Git repository
+- `*.pyc`, `*.pyo`, `.DS_Store` - Build artifacts
+
+**Upload to Snowflake:**
+```sql
+-- From SnowSQL or Snowflake worksheet
+PUT file://dist/snowflake/my_project-0.1.0.zip @your_stage AUTO_COMPRESS=FALSE;
+
+-- Verify upload
+LIST @your_stage;
+
+-- Use in Snowpark procedure or UDF
+CREATE OR REPLACE PROCEDURE run_customer_segmentation()
+RETURNS STRING
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.12'
+PACKAGES = ('snowflake-snowpark-python')
+IMPORTS = ('@your_stage/my_project-0.1.0.zip')
+HANDLER = 'my_project.pipelines.customer_segmentation.customer_segmentation_runner.CustomerSegmentationPipeline.run';
+```
+
+**Requirements:**
+- Must run from within a pypeline project (looks for `pyproject.toml` with `[tool.pypeline]`)
+- Project must have valid `pyproject.toml`
+
+**Best Practices:**
+- Run `pypeline build` before deploying to Snowflake
+- Version your project:
+  - With git: `git tag v0.1.0` (if using `--git` flag during init)
+  - Without git: Update `version` in `pyproject.toml` manually
+- Review excluded files - ensure no sensitive data is included
+- Test ZIP structure with `unzip -l dist/snowflake/*.zip`
+
+---
+
 ## Project Structure
 
 When you run `pypeline init --name my_pipeline`, it creates:
@@ -773,6 +863,12 @@ python -m my_project.pipelines.order_fulfillment.order_fulfillment_runner
 # 8. Write tests
 # Edit: processors/tests/test_orders_extractor_processor.py
 pytest tests/
+
+# 9. Build Snowflake distribution
+pypeline build
+
+# 10. Deploy to Snowflake
+# Upload dist/snowflake/*.zip to Snowflake stage
 ```
 
 ### Adding New Dependencies

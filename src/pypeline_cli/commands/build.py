@@ -1,8 +1,6 @@
 import click
-import platform
 import shutil
-import subprocess
-import sys
+import zipfile
 
 from pathlib import Path
 
@@ -11,7 +9,7 @@ from ..core.managers.project_context import ProjectContext
 
 @click.command()
 def build():
-    """Build wheel, sdist, and Snowflake-compatible ZIP distribution"""
+    """Create Snowflake-compatible ZIP of project with pyproject.toml at root"""
 
     click.echo("\n🚀 Building Snowflake distribution...\n")
 
@@ -19,83 +17,100 @@ def build():
     ctx = ProjectContext(start_dir=Path.cwd(), init=False)
     click.echo(f"📁 Project root: {ctx.project_root}")
 
-    # Determine Python executable - prefer venv if it exists
-    venv_path = ctx.project_root / ".venv"
-    if platform.system() == "Windows":
-        python_exe = venv_path / "Scripts" / "python.exe"
-    else:
-        python_exe = venv_path / "bin" / "python"
+    # Read project name and version from pyproject.toml
+    import tomllib
 
-    if not python_exe.exists():
-        click.echo(
-            "⚠️  Virtual environment not found. Run 'pypeline install' first to create it."
-        )
-        sys.exit(1)
+    with open(ctx.toml_path, "rb") as f:
+        toml_data = tomllib.load(f)
+
+    project_name = toml_data["project"]["name"]
+    # Get version - either static or dynamic (will be 0.0.0 placeholder if dynamic)
+    version = toml_data["project"].get("version", "0.0.0")
 
     dist = ctx.project_root / "dist"
     snowflake_dir = dist / "snowflake"
 
-    # Clean the dist folder
-    if dist.exists():
-        click.echo("🧹 Cleaning dist folder...")
-        for item in dist.iterdir():
-            if item.is_file():
-                item.unlink()
-            elif item.is_dir():
-                shutil.rmtree(item)
+    # Clean and create dist directories
+    if snowflake_dir.exists():
+        click.echo("🧹 Cleaning dist/snowflake folder...")
+        shutil.rmtree(snowflake_dir)
 
-    # Create snowflake directory
     snowflake_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build wheel and sdist
-    click.echo("\n🔨 Building distributions...")
-    result = subprocess.run(
-        [str(python_exe), "-m", "build"],
-        cwd=ctx.project_root,
-        capture_output=False,
-        check=False,
+    # Create ZIP filename
+    zip_filename = f"{project_name}-{version}.zip"
+    zip_path = snowflake_dir / zip_filename
+
+    click.echo(f"\n📦 Creating Snowflake ZIP: {zip_filename}")
+    click.echo(
+        "   (pyproject.toml will be at root level when unzipped)\n"
     )
 
-    if result.returncode != 0:
-        click.echo("\n❌ Build failed")
-        sys.exit(1)
+    # Files and directories to exclude
+    exclude_patterns = {
+        ".venv",
+        "dist",
+        "__pycache__",
+        ".pytest_cache",
+        ".git",
+        ".ruff_cache",
+        "htmlcov",
+        ".coverage",
+        "*.pyc",
+        "*.pyo",
+        "*.pyd",
+        ".DS_Store",
+        ".egg-info",
+    }
 
-    # Create Snowflake ZIPs from wheels
-    # Snowflake stages require special handling:
-    # 1. Sometimes reject .whl files, need .zip extension
-    # 2. Must have pyproject.toml at top level when unzipped
-    # Simply copying .whl to .zip works because wheels ARE zips internally
-    # and already have the correct structure
-    click.echo("\n📦 Creating Snowflake-compatible ZIPs...")
+    def should_exclude(path: Path) -> bool:
+        """Check if path should be excluded from ZIP."""
+        # Check if any part of the path matches exclude patterns
+        for part in path.parts:
+            if part in exclude_patterns or part.endswith(".egg-info"):
+                return True
+        # Check wildcard patterns
+        if path.suffix in [".pyc", ".pyo", ".pyd"]:
+            return True
+        if path.name == ".DS_Store":
+            return True
+        return False
 
-    zip_count = 0
-    for whl in dist.glob("*.whl"):
-        zip_file = snowflake_dir / whl.with_suffix(".zip").name
-        shutil.copy(whl, zip_file)
-        click.echo(f"  ✅ snowflake/{zip_file.name}")
-        zip_count += 1
+    # Create ZIP with project files
+    # CRITICAL: Files must be added relative to project root so pyproject.toml
+    # is at the ZIP root level (not nested in a folder)
+    file_count = 0
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for item in ctx.project_root.rglob("*"):
+            if item.is_file() and not should_exclude(item):
+                # Get path relative to project root
+                arcname = item.relative_to(ctx.project_root)
+                zipf.write(item, arcname)
+                file_count += 1
 
-    if zip_count == 0:
-        click.echo("  ⚠️  No wheel files found")
-        sys.exit(1)
+                # Show some files being added (not all to avoid spam)
+                if file_count <= 10 or arcname.name == "pyproject.toml":
+                    click.echo(f"   ✓ {arcname}")
 
-    # Show all distributions
-    click.echo("\n📊 Distribution files:")
-    click.echo("\n  PyPI distributions:")
-    for file in sorted(dist.glob("*.whl")):
-        size_kb = file.stat().st_size / 1024
-        click.echo(f"    • {file.name:<48} {size_kb:>7.1f} KB")
+    if file_count > 10:
+        click.echo(f"   ... and {file_count - 10} more files")
 
-    for file in sorted(dist.glob("*.tar.gz")):
-        size_kb = file.stat().st_size / 1024
-        click.echo(f"    • {file.name:<48} {size_kb:>7.1f} KB")
+    # Show ZIP info
+    zip_size_kb = zip_path.stat().st_size / 1024
+    click.echo(f"\n📊 Snowflake distribution:")
+    click.echo(f"   • snowflake/{zip_filename:<40} {zip_size_kb:>7.1f} KB")
+    click.echo(f"   • Total files: {file_count}")
 
-    click.echo("\n  Snowflake distributions:")
-    for file in sorted(snowflake_dir.glob("*.zip")):
-        size_kb = file.stat().st_size / 1024
-        click.echo(f"    • snowflake/{file.name:<40} {size_kb:>7.1f} KB")
+    # Verify pyproject.toml is at root
+    with zipfile.ZipFile(zip_path, "r") as zipf:
+        if "pyproject.toml" in zipf.namelist():
+            click.echo("\n✅ Verified: pyproject.toml is at ZIP root level")
+        else:
+            click.echo(
+                "\n⚠️  Warning: pyproject.toml not found at ZIP root"
+            )
 
     click.echo("\n✅ Build complete!")
     click.echo(
-        "\n💡 Upload to Snowflake stage with: PUT file://dist/snowflake/*.zip @your_stage AUTO_COMPRESS=FALSE"
+        f"\n💡 Upload to Snowflake stage with:\n   PUT file://dist/snowflake/{zip_filename} @your_stage AUTO_COMPRESS=FALSE"
     )
