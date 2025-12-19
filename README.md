@@ -46,9 +46,13 @@ Building production data pipelines in Snowflake involves repetitive boilerplate:
 pypeline-cli generates opinionated, production-ready project structures that follow industry best practices. It provides:
 
 ✅ **Instant scaffolding** - Complete project setup in seconds
+
 ✅ **Consistent architecture** - Processor pattern for modular ETL logic
+
 ✅ **Built-in utilities** - Logger, ETL singleton, decorators, table configs
+
 ✅ **Dependency management** - User-friendly Python file instead of TOML editing
+
 ✅ **Snowflake-first** - Designed specifically for Snowpark development
 
 ---
