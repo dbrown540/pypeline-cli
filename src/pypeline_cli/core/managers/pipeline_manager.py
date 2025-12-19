@@ -54,6 +54,11 @@ class PipelineManager:
 
         pipeline_folder.mkdir(parents=False, exist_ok=False)
 
+        # Create __init__.py in pipeline folder
+        pipeline_init = pipeline_folder / "__init__.py"
+        pipeline_init.touch()
+        click.echo("  ✓ Created __init__.py")
+
         # 2. Create subfolders
         processors_folder = pipeline_folder / "processors"
         tests_folder = pipeline_folder / "tests"
@@ -80,7 +85,9 @@ class PipelineManager:
             "README.md.template", pipeline_folder / "README.md", substitutions
         )
         self._create_from_template(
-            "processors_init.py.template", processors_folder / "__init__.py", substitutions
+            "processors_init.py.template",
+            processors_folder / "__init__.py",
+            substitutions,
         )
         self._create_from_template(
             "tests_init.py.template", tests_folder / "__init__.py", substitutions

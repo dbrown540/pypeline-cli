@@ -70,7 +70,6 @@ def create_project(
     scaffolding_manager = ScaffoldingManager(ctx=ctx)
     scaffolding_manager.create_folder_scaffolding(
         [
-            ctx.src_path,
             ctx.import_folder,
             ctx.pipelines_folder_path,
             ctx.schemas_folder_path,

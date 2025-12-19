@@ -15,6 +15,11 @@ class ScaffoldingManager:
     def create_folder_scaffolding(self, paths: List[Path]):
         for path in paths:
             Path(path).mkdir(parents=False, exist_ok=False)
+            # Create __init__.py in Python package folders
+            if path.name in ["pipelines", "utils", "schemas"]:
+                init_file = path / "__init__.py"
+                init_file.touch()
+                click.echo(f"Successfully created {init_file}")
 
     def create_files_from_templates(self, scaffold_files: List[ScaffoldFile]):
         for file in scaffold_files:

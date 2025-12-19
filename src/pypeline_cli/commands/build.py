@@ -9,7 +9,7 @@ from ..core.managers.project_context import ProjectContext
 
 @click.command()
 def build():
-    """Create Snowflake-compatible ZIP of project with pyproject.toml at root"""
+    """Create Snowflake-compatible ZIP with package at root and pyproject.toml"""
 
     click.echo("\n🚀 Building Snowflake distribution...\n")
 
@@ -24,16 +24,40 @@ def build():
         toml_data = tomllib.load(f)
 
     project_name = toml_data["project"]["name"]
-    # Get version - either static or dynamic (will be 0.0.0 placeholder if dynamic)
     version = toml_data["project"].get("version", "0.0.0")
+    package_name = project_name.replace("-", "_")
+
+    # Find the package directory
+    package_dir = ctx.project_root / package_name
+
+    if not package_dir.exists():
+        click.echo(f"❌ Package directory not found: {package_dir}")
+        return
 
     dist = ctx.project_root / "dist"
     snowflake_dir = dist / "snowflake"
 
-    # Clean and create dist directories
+    # Clean and create dist directories with retry for Windows
     if snowflake_dir.exists():
         click.echo("🧹 Cleaning dist/snowflake folder...")
-        shutil.rmtree(snowflake_dir)
+        import time
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                shutil.rmtree(snowflake_dir)
+                break
+            except PermissionError:
+                if attempt < max_retries - 1:
+                    click.echo(
+                        f"   ⚠️  Retrying... (attempt {attempt + 1}/{max_retries})"
+                    )
+                    time.sleep(1)
+                else:
+                    click.echo(
+                        "\n❌ Failed to clean folder. Close any open programs and try again."
+                    )
+                    return
 
     snowflake_dir.mkdir(parents=True, exist_ok=True)
 
@@ -42,75 +66,82 @@ def build():
     zip_path = snowflake_dir / zip_filename
 
     click.echo(f"\n📦 Creating Snowflake ZIP: {zip_filename}")
-    click.echo(
-        "   (pyproject.toml will be at root level when unzipped)\n"
-    )
+    click.echo(f"   Package '{package_name}' will be at root level\n")
 
     # Files and directories to exclude
     exclude_patterns = {
-        ".venv",
-        "dist",
         "__pycache__",
         ".pytest_cache",
-        ".git",
         ".ruff_cache",
-        "htmlcov",
-        ".coverage",
         "*.pyc",
         "*.pyo",
         "*.pyd",
         ".DS_Store",
-        ".egg-info",
     }
 
     def should_exclude(path: Path) -> bool:
         """Check if path should be excluded from ZIP."""
-        # Check if any part of the path matches exclude patterns
         for part in path.parts:
-            if part in exclude_patterns or part.endswith(".egg-info"):
+            if part in exclude_patterns:
                 return True
-        # Check wildcard patterns
         if path.suffix in [".pyc", ".pyo", ".pyd"]:
             return True
         if path.name == ".DS_Store":
             return True
         return False
 
-    # Create ZIP with project files
-    # CRITICAL: Files must be added relative to project root so pyproject.toml
-    # is at the ZIP root level (not nested in a folder)
+    # Create ZIP with proper structure
     file_count = 0
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for item in ctx.project_root.rglob("*"):
+        # 1. Add pyproject.toml at root (REQUIRED by Snowflake)
+        zipf.write(ctx.toml_path, "pyproject.toml")
+        click.echo("   ✓ pyproject.toml")
+        file_count += 1
+
+        # 2. Add the package directory at root
+        for item in package_dir.rglob("*"):
             if item.is_file() and not should_exclude(item):
-                # Get path relative to project root
+                # Make path relative to project_root so package is at root
                 arcname = item.relative_to(ctx.project_root)
                 zipf.write(item, arcname)
                 file_count += 1
 
-                # Show some files being added (not all to avoid spam)
-                if file_count <= 10 or arcname.name == "pyproject.toml":
+                if file_count <= 15:
                     click.echo(f"   ✓ {arcname}")
 
-    if file_count > 10:
-        click.echo(f"   ... and {file_count - 10} more files")
+    if file_count > 15:
+        click.echo(f"   ... and {file_count - 15} more files")
 
     # Show ZIP info
     zip_size_kb = zip_path.stat().st_size / 1024
-    click.echo(f"\n📊 Snowflake distribution:")
+    click.echo("\n📊 Snowflake distribution:")
     click.echo(f"   • snowflake/{zip_filename:<40} {zip_size_kb:>7.1f} KB")
     click.echo(f"   • Total files: {file_count}")
 
-    # Verify pyproject.toml is at root
+    # Verify structure
     with zipfile.ZipFile(zip_path, "r") as zipf:
-        if "pyproject.toml" in zipf.namelist():
-            click.echo("\n✅ Verified: pyproject.toml is at ZIP root level")
+        namelist = zipf.namelist()
+
+        # Check for pyproject.toml at root
+        if "pyproject.toml" in namelist:
+            click.echo("\n✅ Verified: pyproject.toml at root")
         else:
-            click.echo(
-                "\n⚠️  Warning: pyproject.toml not found at ZIP root"
-            )
+            click.echo("\n❌ ERROR: pyproject.toml missing")
+            return
+
+        # Check package is at root
+        package_init = f"{package_name}/__init__.py"
+        if package_init in namelist:
+            click.echo(f"✅ Verified: {package_name}/ at root level (importable)")
+        else:
+            click.echo(f"❌ ERROR: {package_init} not at root")
+            click.echo(f"   First 10 files: {namelist[:10]}")
+            return
 
     click.echo("\n✅ Build complete!")
+    click.echo("\n💡 Upload to Snowflake:")
     click.echo(
-        f"\n💡 Upload to Snowflake stage with:\n   PUT file://dist/snowflake/{zip_filename} @your_stage AUTO_COMPRESS=FALSE"
+        f"   PUT file://{zip_path.relative_to(ctx.project_root)} @your_stage AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
     )
+    click.echo("\n💡 Import in Snowflake:")
+    click.echo(f"   from {package_name} import BeneficiaryPipeline")

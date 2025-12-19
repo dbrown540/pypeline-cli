@@ -55,7 +55,7 @@ twine upload dist/*
 ### Manager Pattern
 The codebase uses a manager pattern where specialized managers handle different aspects of project creation:
 
-- **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.toml_path`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`).
+- **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.import_folder`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`).
 
 - **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back.
 
@@ -82,7 +82,7 @@ The `init` command flow:
    - Manual versioning (if `--no-git` flag used): Static version "0.1.0", no hatch-vcs dependency
 5. DependenciesManager creates `dependencies.py` from template
 6. LicenseManager creates LICENSE file
-7. ScaffoldingManager creates folder structure (src, tests, pipelines, schemas, utils)
+7. ScaffoldingManager creates folder structure (project_name/, tests/, pipelines/, schemas/, utils/)
 8. ScaffoldingManager copies all template files from `config.INIT_SCAFFOLD_FILES`
 
 The `sync-deps` command flow:
@@ -124,7 +124,7 @@ The `build` command flow:
 6. Excludes build artifacts (.venv, dist, __pycache__, .git, etc.)
 7. Verifies `pyproject.toml` is at ZIP root and displays upload instructions
 
-**Critical**: The ZIP must have `pyproject.toml` at root level (not nested in a folder) for Snowflake to properly import the package. The build command ensures this by adding all files relative to the project root.
+**Critical**: The ZIP must have `pyproject.toml` at root level (not nested in a folder) for Snowflake to properly import the package. The build command ensures this by adding all files relative to the project root. Package structure is `project_name/project_name/` (NOT `project_name/src/project_name/`).
 
 ### Template System
 
@@ -221,6 +221,40 @@ pypeline-cli/
 │       ├── valdators.py          # Input validation
 │       └── name_converter.py     # Name normalization/conversion
 └── tests/                        # Test files
+```
+
+## Generated Project Structure
+
+When users run `pypeline init`, the generated project has this structure (NO src/ folder):
+
+```
+my_project/                      # Project root
+├── pyproject.toml               # Package configuration
+├── dependencies.py              # User-editable dependency list
+├── LICENSE                      # Project license
+├── README.md                    # Project documentation
+├── my_project/                  # Package directory (importable)
+│   ├── __init__.py             # Package exports
+│   ├── _version.py             # Auto-generated version (if using git)
+│   ├── pipelines/              # Pipeline orchestrators
+│   │   └── example_pipeline/
+│   │       ├── example_pipeline_runner.py
+│   │       ├── config.py
+│   │       ├── README.md
+│   │       ├── processors/
+│   │       └── tests/
+│   ├── schemas/                # Database schemas (user-created)
+│   └── utils/                  # Framework utilities
+│       ├── columns.py
+│       ├── databases.py
+│       ├── date_parser.py
+│       ├── decorators.py
+│       ├── etl.py             # ETL singleton
+│       ├── logger.py          # Logger singleton
+│       ├── snowflake_utils.py
+│       └── tables.py          # TableConfig classes
+└── tests/                      # Integration tests
+    └── basic_test.py
 ```
 
 ## Pipeline Architecture

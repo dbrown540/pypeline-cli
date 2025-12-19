@@ -36,7 +36,7 @@ class TOMLManager:
                 "build": {
                     "hooks": {
                         "vcs": {
-                            "version-file": f"src/{name}/_version.py",
+                            "version-file": f"{name}/_version.py",
                         },
                     },
                 },

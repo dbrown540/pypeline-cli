@@ -39,12 +39,8 @@ class ProjectContext:
         return self.project_root / "pyproject.toml"
 
     @property
-    def src_path(self) -> Path:
-        return self.project_root / "src"
-
-    @property
     def import_folder(self) -> Path:
-        return self.src_path / self.project_root.name
+        return self.project_root / self.project_root.name
 
     @property
     def dependencies_path(self) -> Path:
