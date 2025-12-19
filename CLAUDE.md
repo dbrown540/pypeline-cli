@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-pypeline-cli is a CLI tool that scaffolds data pipeline projects with opinionated templates and dependency management. It generates complete project structures with Snowflake-focused utilities, manages dependencies via a user-friendly Python file, and handles git initialization.
+pypeline-cli is a highly-opinionated, batteries-included lightweight framework for building Snowflake ETL pipelines with Snowpark. It scaffolds production-ready data pipeline projects with built-in session management, logging, table configuration, and a proven Extract-Transform-Load pattern. The framework generates complete project structures with Snowflake-focused utilities, manages dependencies via a user-friendly Python file, and provides runtime components (ETL singleton, Logger, decorators) that enforce best practices.
 
 ## Development Commands
 
@@ -67,6 +67,8 @@ The codebase uses a manager pattern where specialized managers handle different 
 
 - **PipelineManager** (`core/managers/pipeline_manager.py`): Creates pipeline folder structures with runner, config, tests, and processors directories. Uses `string.Template` for variable substitution in templates. Automatically registers pipeline classes in the package's `__init__.py` for top-level imports.
 
+- **ProcessorManager** (`core/managers/processor_manager.py`): Creates processor classes within existing pipelines. Generates processor file with Extract/Transform pattern, test file with pytest fixtures, and auto-registers import in pipeline runner file. Uses `string.Template` for variable substitution.
+
 - **GitManager** (`core/managers/git_manager.py`): Initializes git repos and creates initial commits with proper line ending configuration.
 
 ### Core Flow
@@ -99,10 +101,22 @@ The `create-pipeline` command flow:
 5. PipelineManager registers pipeline class in package `__init__.py` for top-level imports
 6. Updates `__all__` list in `__init__.py` for explicit exports
 
+The `create-processor` command flow:
+1. Validates and normalizes both processor name and pipeline name
+2. Converts processor name to PascalCase with "Processor" suffix (e.g., `sales-extractor` → `SalesExtractorProcessor`)
+3. ProjectContext searches up tree for pypeline project (init=False mode)
+4. Verifies pipeline exists at `pipelines/{pipeline_name}/`
+5. Creates processor files:
+   - `pipelines/{pipeline}/processors/{name}_processor.py` - Processor class with Extract/Transform pattern
+   - `pipelines/{pipeline}/processors/tests/test_{name}_processor.py` - Unit test file with pytest fixtures
+6. Creates `processors/tests/` subdirectory if it doesn't exist
+7. ProcessorManager auto-registers import in `{pipeline}_runner.py`
+8. Import statement inserted after existing processor imports (or after last import if first processor)
+
 ### Template System
 
 Templates are stored in `src/pypeline_cli/templates/`:
-- `init/` - Project scaffolding templates (databases.py, etl.py, tables.py, etc.)
+- `init/` - Project scaffolding templates (databases.py, etl.py, tables.py, logger.py, decorators.py, etc.)
 - `licenses/` - 14 different license templates with variable substitution
 - `pipelines/` - Pipeline templates with variable substitution:
   - `runner.py.template` - Pipeline orchestrator with run(), pipeline(), run_processors(), _write_to_snowflake()
@@ -110,6 +124,9 @@ Templates are stored in `src/pypeline_cli/templates/`:
   - `README.md.template` - Pipeline documentation structure
   - `processors_init.py.template` - Processors package marker
   - `tests_init.py.template` - Integration tests package marker
+- `processors/` - Processor templates with variable substitution:
+  - `processor.py.template` - Processor class with __init__() for Extract, process() for Transform
+  - `test_processor.py.template` - pytest unit test template with mocking fixtures
 
 The `config.py` file defines `INIT_SCAFFOLD_FILES` list that maps template files to ProjectContext properties for destination paths.
 
@@ -117,6 +134,12 @@ The `config.py` file defines `INIT_SCAFFOLD_FILES` list that maps template files
 Pipeline templates use `string.Template` with variables:
 - `$class_name` - PascalCase class name with "Pipeline" suffix (e.g., "BeneficiaryClaimsPipeline")
 - `$pipeline_name` - Normalized name (e.g., "beneficiary_claims")
+- `$project_name` - Project name from ProjectContext for import paths
+
+Processor templates use `string.Template` with variables:
+- `$class_name` - PascalCase class name with "Processor" suffix (e.g., "SalesExtractorProcessor")
+- `$processor_name` - Normalized name (e.g., "sales_extractor")
+- `$pipeline_name` - Normalized pipeline name (e.g., "customer_segmentation")
 - `$project_name` - Project name from ProjectContext for import paths
 
 ### Dependency Management Philosophy
@@ -154,7 +177,8 @@ pypeline-cli/
 │   │   ├── init.py          # pypeline init
 │   │   ├── sync_deps.py     # pypeline sync-deps
 │   │   ├── install.py       # pypeline install
-│   │   └── create_pipeline.py   # pypeline create-pipeline
+│   │   ├── create_pipeline.py   # pypeline create-pipeline
+│   │   └── create_processor.py  # pypeline create-processor
 │   ├── core/
 │   │   ├── create_project.py     # Orchestrates project creation
 │   │   └── managers/             # Manager classes for different concerns
@@ -163,21 +187,25 @@ pypeline-cli/
 │   │       ├── dependencies_manager.py
 │   │       ├── license_manager.py
 │   │       ├── scaffolding_manager.py
-│   │       ├── pipeline_manager.py   # NEW: Pipeline creation
+│   │       ├── pipeline_manager.py    # Pipeline creation
+│   │       ├── processor_manager.py   # Processor creation
 │   │       └── git_manager.py
 │   ├── templates/
 │   │   ├── init/                 # Template files for generated projects
 │   │   ├── licenses/             # License templates
-│   │   └── pipelines/            # NEW: Pipeline templates
-│   │       ├── runner.py.template
-│   │       ├── config.py.template
-│   │       ├── README.md.template
-│   │       ├── processors_init.py.template
-│   │       └── tests_init.py.template
+│   │   ├── pipelines/            # Pipeline templates
+│   │   │   ├── runner.py.template
+│   │   │   ├── config.py.template
+│   │   │   ├── README.md.template
+│   │   │   ├── processors_init.py.template
+│   │   │   └── tests_init.py.template
+│   │   └── processors/           # Processor templates
+│   │       ├── processor.py.template
+│   │       └── test_processor.py.template
 │   └── utils/
 │       ├── dependency_parser.py  # Parse dependency strings
 │       ├── valdators.py          # Input validation
-│       └── name_converter.py     # NEW: Name normalization/conversion
+│       └── name_converter.py     # Name normalization/conversion
 └── tests/                        # Test files
 ```
 
@@ -229,13 +257,42 @@ class BeneficiaryClaimsPipeline:
         """Uses df.write.mode().save_as_table()"""
 ```
 
-### Processor Pattern (User-Created)
+### Processor Pattern
 
-Processors (created by users, will have `create-processor` command later):
-- Handle data extraction in `__init__` using TableConfig from `utils/tables.py`
+Processors are created using `pypeline create-processor --name <name> --pipeline <pipeline>`:
+- Handle data extraction in `__init__` using TableConfig from `utils/tables.py` or pipeline `config.py`
 - Implement `process()` method as orchestrator for transformations
 - Use private methods for atomized transformation steps
 - Return DataFrames
+- Auto-instantiate Logger and ETL utilities
+- Use `@time_function` decorator on `process()` method
+
+Generated processor structure:
+```python
+class SalesExtractorProcessor:
+    def __init__(self, month: int):
+        self.logger = Logger()
+        self.etl = ETL()
+        # Extract data using TableConfig
+        SALES_TABLE.month = month
+        table_name = SALES_TABLE.generate_table_name()
+        self.sales_df = self.etl.session.table(table_name)
+
+    @time_function(f"{MODULE_NAME}.process")
+    def process(self) -> DataFrame:
+        # Orchestrate transformations
+        df = self._filter_valid()
+        df = self._aggregate(df)
+        return df
+
+    def _filter_valid(self) -> DataFrame:
+        # Atomized transformation
+        return self.sales_df.filter(col("STATUS") == "COMPLETED")
+
+    def _aggregate(self, df: DataFrame) -> DataFrame:
+        # Atomized transformation
+        return df.group_by("CUSTOMER_ID").agg(sum_("AMOUNT"))
+```
 
 ### Auto-Registration
 
@@ -255,16 +312,24 @@ from my_project import BeneficiaryClaimsPipeline, EnrollmentPipeline
 
 ### Naming Conventions
 
+**Pipelines:**
 - **Input**: User provides name (e.g., `beneficiary-claims`, `enrollment`, `CLAIMS`)
 - **Normalization**: Convert to lowercase with underscores (e.g., `beneficiary_claims`)
 - **Folder/File**: Use normalized name (e.g., `pipelines/beneficiary_claims/beneficiary_claims_runner.py`)
 - **Class Name**: PascalCase + "Pipeline" suffix (e.g., `BeneficiaryClaimsPipeline`)
-- **Import**: Registered in `__init__.py` for top-level package import
+- **Import**: Registered in package `__init__.py` for top-level import
+
+**Processors:**
+- **Input**: User provides name (e.g., `sales-extractor`, `msp`, `ENRICHMENT`)
+- **Normalization**: Convert to lowercase with underscores (e.g., `sales_extractor`)
+- **File**: Use normalized name with `_processor.py` suffix (e.g., `sales_extractor_processor.py`)
+- **Class Name**: PascalCase + "Processor" suffix (e.g., `SalesExtractorProcessor`)
+- **Import**: Auto-registered in pipeline runner file (e.g., `from .processors.sales_extractor_processor import SalesExtractorProcessor`)
 
 Handled by `utils/name_converter.py`:
 - `normalize_name()` - Strips whitespace, lowercases, converts hyphens to underscores
 - `to_pascal_case()` - Converts normalized name to PascalCase
-- Command adds "Pipeline" suffix to class name
+- Commands add appropriate suffix ("Pipeline" or "Processor") to class name
 
 ## Key Conventions
 
@@ -273,4 +338,14 @@ Handled by `utils/name_converter.py`:
 - **Template naming**: Templates end with `.template` extension
 - **Manager initialization**: All managers receive `ProjectContext` instance
 - **Version management**: Projects use hatch-vcs for git tag-based versioning
-- **Pipeline naming**: Class names always have "Pipeline" suffix (e.g., `BeneficiaryClaimsPipeline`)
+- **Class naming**:
+  - Pipeline classes always have "Pipeline" suffix (e.g., `BeneficiaryClaimsPipeline`)
+  - Processor classes always have "Processor" suffix (e.g., `SalesExtractorProcessor`)
+- **ETL Pattern**:
+  - Extract happens in processor `__init__()` method
+  - Transform happens in processor `process()` method
+  - Load happens in pipeline `_write_to_snowflake()` method
+- **Framework vs User Code**:
+  - Framework files (etl.py, logger.py, decorators.py) marked "DO NOT MODIFY"
+  - User-editable files (databases.py, tables.py, dependencies.py) clearly documented
+  - Generated scaffolding (runners, processors) includes TODO comments for implementation

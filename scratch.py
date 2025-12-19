@@ -1,77 +1,61 @@
-from pathlib import Path
-from typing import Final
+from datetime import date
 
+from snowflake.snowpark.functions import col
 from snowflake.snowpark import DataFrame
 
-from ...utils.logger import Logger
-from ...utils.etl import ETL
-from ...utils.decorators import time_function
+from ..config import MSP_PROD_MAX, TABLE_CONFIGS
+from ....utils.decorators import time_function
+from ....utils.etl import ETL
+from ....utils.logger import Logger
 
-MODULE_NAME: Final[str] = Path(__file__).name
+MODULE_NAME: Final[str] = "processors/msp_processor.py"
 
-class BeneficiaryPipeline:
-    """Pipeline class"""
-
+class MSPProcessor:
+    """
+    Processor for dealing with transformations related to the medicare secondary payer table extracts
+    """
     def __init__(self):
+        self.processing_year = processing_year
         self.logger = Logger()
+        self.msp_prod_max = MSP_PROD_MAX
         self.etl = ETL()
+        self.msp_table_config = TABLE_CONFIGS["MSP"].generate_table_name()
 
-    @time_function("BeneficiaryPipeline.run")
-    def run(
-        self,
-        _write: bool = False
-    ):
-        self.pipeline(_write)
-        self.logger.info(
-            message="The beneficiary pipeline completed successfully.",
-            context=MODULE_NAME
-        )
-
-    def pipeline(
-        self,
-        _write: bool
-    ):
-        """Organization of processors"""
-        # Custom conditional logic
-        df: DataFrame = self.run_processors()
-        if _write:
-            self._write_to_snowflake(
-                df,
-                write_mode="overwrite",
-                table_path=table_name
+    @time_function(f"{MODULE_NAME}.run")
+    def process(self,) -> DataFrame:
+        if self.processing_year > self.msp_prod_max:
+            self.logger.info(
+                message=f"Year {self.processing_year} > {self.msp_prod_max}: Processing from Snowflake",
+                context=MODULE_NAME
             )
+            return self._extract_msp_data()
+        else:
+            self.logger.info(
+                message=f"Year {self.processing_year} <= {self.msp_prod_max}: Using historical data",
+                context=MODULE_NAME
+            )
+            reutrn self._process_from_historical()
 
-    def run_processors(
-            self
-    ):
-        msp_processor = MSPProcessor(...)
-        msp_df = msp_processor.process(...)
+    def _extract_msp_data(self) -> DataFrame:
+        # Snowpark transformations...
+        ...
 
-        # n number of processors
-        # ...
+    def _process_from_historical(self) -> DataFrame:
+        # Snowpark transformations...
+        ...
 
-        return final_df
-    
-    def _write_to_snowflake(
-            self,
-            df: DataFrame,
-            write_mode: Literal[
-                "append",
-                "overwrite",
-                "truncate",
-                "errorifexists",
-                "ignore"
-            ],
-            table_path: str
-    ):
-        self.logger.info(
-            message=f"Writing DataFrame as table to {table_path}",
-            context=MODULE_NAME
-        )
+"""
+Maybe there are other private methods that support these ones? 
 
-        df.write.mode(write_mode).save_as_table(table_path)
+At the end, process() is the orchestrator for the processor level. 
+process() will always return a dataframe to be returns to the pipeline orchestrator. in that case, BeneficiaryPipeline.
 
-        self.logger.info(
-            message=f"Successfully saved table to {table_path}",
-            context=MODULE_NAME
-        )
+Processors manage their own extracts using config.py to get their table data.
+config.py is already generated.
+
+Whenever we create a new processor, we want to create a unit test file under pipelines/{pipeline}/processors/tests
+For reference, the new processor will be places in pipelines/{pipeline}/processors/{processor_name}_processor.py
+
+Another feature of processors is that they are automatically imported to their respective runner file upon creation.
+
+"""

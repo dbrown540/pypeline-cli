@@ -70,7 +70,9 @@ def create_pipeline(name: str):
         click.echo("\n📝 Next steps:")
         click.echo(f"  1. Review {pipeline_folder}/README.md")
         click.echo(f"  2. Add configuration to {pipeline_folder}/config.py")
-        click.echo(f"  3. Create processor classes in {pipeline_folder}/processors/")
+        click.echo(
+            f"  3. Create processors: pypeline create-processor --name <processor-name> --pipeline {normalized_name}"
+        )
         click.echo(f"  4. Update {normalized_name}_runner.py to use your processors")
 
     except FileExistsError as e:

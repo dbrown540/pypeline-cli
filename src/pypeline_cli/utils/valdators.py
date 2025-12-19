@@ -163,6 +163,59 @@ def validate_pipeline_name(name: str) -> tuple[bool, str]:
     return True, normalized
 
 
+def validate_processor_name(name: str) -> tuple[bool, str]:
+    """
+    Validate and normalize processor name.
+
+    Accepts alphanumeric characters, hyphens, and underscores.
+    Converts to normalized form (lowercase, underscores).
+
+    Returns:
+        (is_valid, normalized_name_or_error_message)
+
+    Note:
+        Same validation rules as pipeline names.
+    """
+    if not name:
+        return False, "Processor name cannot be empty"
+
+    # Strip whitespace
+    name = name.strip()
+
+    # Check length
+    if len(name) > 100:  # Reasonable limit for processor names
+        return False, "Processor name too long (max 100 characters)"
+
+    # Allow only alphanumeric, hyphens, and underscores
+    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+        return False, (
+            f"'{name}' contains invalid characters. "
+            "Use only letters, numbers, hyphens, and underscores"
+        )
+
+    # Must start with a letter or underscore (Python identifier requirement)
+    if not (name[0].isalpha() or name[0] == "_"):
+        return False, "Processor name must start with a letter or underscore"
+
+    # Normalize the name
+    from .name_converter import normalize_name
+
+    normalized = normalize_name(name)
+
+    # Verify normalized name is a valid Python identifier
+    if not normalized.isidentifier():
+        return False, f"'{name}' cannot be converted to a valid Python identifier"
+
+    # Check for Python keywords
+    import keyword
+
+    if keyword.iskeyword(normalized):
+        return False, f"'{normalized}' is a Python keyword and cannot be used"
+
+    # Return success with normalized name
+    return True, normalized
+
+
 # Mapping of parameter names to their validator functions
 PARAM_VALIDATORS = {
     "name": validate_project_name,
