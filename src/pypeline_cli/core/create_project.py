@@ -18,14 +18,16 @@ def create_project(
     license: str,
     company_name: str,
     path: Path,
+    use_git: bool = False,
 ):
     # Create the project root
     Path.mkdir(path, parents=False, exist_ok=False)
 
-    create_git_repo(path)
+    if use_git:
+        create_git_repo(path)
 
-    # Create .gitattributes for consistent line endings
-    gitattributes_content = """# Ensure line endings are consistent
+        # Create .gitattributes for consistent line endings
+        gitattributes_content = """# Ensure line endings are consistent
 * text=auto
 *.py text eol=lf
 *.toml text eol=lf
@@ -34,7 +36,7 @@ def create_project(
 *.yaml text eol=lf
 *.yml text eol=lf
 """
-    (path / ".gitattributes").write_text(gitattributes_content.strip())
+        (path / ".gitattributes").write_text(gitattributes_content.strip())
 
     # Create TOML file
     toml_manager = TOMLManager(
@@ -47,6 +49,7 @@ def create_project(
         author_email=author_email,
         description=description,
         license=license,
+        use_git=use_git,
     )
 
     dependencies_manager = DependenciesManager(ctx=ctx)

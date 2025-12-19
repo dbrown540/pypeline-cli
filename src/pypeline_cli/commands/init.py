@@ -41,6 +41,11 @@ from ..config import LICENSES
     prompt="[OPTIONAL] Please enter your company name",
     help="Company or organization name (optional, for license)",
 )
+@click.option(
+    "--git/--no-git",
+    default=False,
+    help="Initialize a git repository (default: disabled)",
+)
 def init(
     destination: str,
     name: str,
@@ -49,6 +54,7 @@ def init(
     description: str,
     license: str,
     company_name: str,
+    git: bool,
 ):
     """Create new ETL pipeline architecture"""
 
@@ -74,6 +80,7 @@ def init(
             license=license,
             company_name=company_name,
             path=path,
+            use_git=git,
         )
 
         click.echo(f"\n✅ Successfully created project '{name}'!")

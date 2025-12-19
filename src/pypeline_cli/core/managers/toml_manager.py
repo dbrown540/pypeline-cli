@@ -20,15 +20,40 @@ class TOMLManager:
         author_email: str,
         description: str,
         license: str,
+        use_git: bool = False,
     ):
-        data = {
-            "build-system": {
+        # Build system configuration depends on whether we're using git versioning
+        if use_git:
+            build_system = {
                 "requires": ["hatchling", "hatch-vcs"],
                 "build-backend": "hatchling.build",
-            },
+            }
+            project_version = {"dynamic": ["version"]}
+            hatch_config = {
+                "version": {
+                    "source": "vcs",
+                },
+                "build": {
+                    "hooks": {
+                        "vcs": {
+                            "version-file": f"src/{name}/_version.py",
+                        },
+                    },
+                },
+            }
+        else:
+            build_system = {
+                "requires": ["hatchling"],
+                "build-backend": "hatchling.build",
+            }
+            project_version = {"version": "0.1.0"}
+            hatch_config = {}
+
+        data = {
+            "build-system": build_system,
             "project": {
                 "name": name,
-                "dynamic": ["version"],
+                **project_version,
                 "authors": [{"name": author_name, "email": author_email}],
                 "description": description,
                 "readme": "README.md",
@@ -37,18 +62,7 @@ class TOMLManager:
                 "dependencies": DEFAULT_DEPENDENCIES.copy(),
             },
             "tool": {
-                "hatch": {
-                    "version": {
-                        "source": "vcs",
-                    },
-                    "build": {
-                        "hooks": {
-                            "vcs": {
-                                "version-file": f"src/{name}/_version.py",
-                            },
-                        },
-                    },
-                },
+                "hatch": hatch_config,
                 "ruff": {
                     "line-length": 88,
                     "target-version": "py39",
