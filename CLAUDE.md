@@ -55,15 +55,17 @@ twine upload dist/*
 ### Manager Pattern
 The codebase uses a manager pattern where specialized managers handle different aspects of project creation:
 
-- **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.toml_path`, `ctx.dependencies_path`).
+- **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.toml_path`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`).
 
-- **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` (Python 3.11+) or `tomli` (Python 3.10) for reading, `tomli_w` for writing. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back.
+- **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back.
 
 - **DependenciesManager** (`core/managers/dependencies_manager.py`): Reads `DEFAULT_DEPENDENCIES` from user's `dependencies.py` file and manages the template file creation.
 
-- **LicenseManager** (`core/managers/license_manager.py`): Creates LICENSE files from templates in `templates/licenses/`, performing variable substitution for author name, year, etc.
+- **LicenseManager** (`core/managers/license_manager.py`): Creates LICENSE files from templates in `templates/licenses/`, performing variable substitution for author name, year, etc. Uses `string.Template` for variable substitution.
 
 - **ScaffoldingManager** (`core/managers/scaffolding_manager.py`): Creates folder structure and copies template files to destination paths using the `ScaffoldFile` dataclass configuration.
+
+- **PipelineManager** (`core/managers/pipeline_manager.py`): Creates pipeline folder structures with runner, config, tests, and processors directories. Uses `string.Template` for variable substitution in templates. Automatically registers pipeline classes in the package's `__init__.py` for top-level imports.
 
 - **GitManager** (`core/managers/git_manager.py`): Initializes git repos and creates initial commits with proper line ending configuration.
 
@@ -84,13 +86,38 @@ The `sync-deps` command flow:
 2. DependenciesManager reads `DEFAULT_DEPENDENCIES` from user's `dependencies.py`
 3. TOMLManager parses dependencies with `dependency_parser.py`, merges by package name, and writes to `pyproject.toml`
 
+The `create-pipeline` command flow:
+1. Validates and normalizes pipeline name (accepts hyphens, converts to underscores)
+2. Converts to PascalCase with "Pipeline" suffix (e.g., `beneficiary-claims` → `BeneficiaryClaimsPipeline`)
+3. ProjectContext searches up tree for pypeline project (init=False mode)
+4. Creates pipeline folder structure:
+   - `pipelines/{name}/{name}_runner.py` - Main pipeline orchestrator
+   - `pipelines/{name}/config.py` - Pipeline-specific configuration with TableConfig imports
+   - `pipelines/{name}/README.md` - Pipeline documentation template
+   - `pipelines/{name}/processors/` - Directory for processor classes
+   - `pipelines/{name}/tests/` - Integration tests for the pipeline
+5. PipelineManager registers pipeline class in package `__init__.py` for top-level imports
+6. Updates `__all__` list in `__init__.py` for explicit exports
+
 ### Template System
 
 Templates are stored in `src/pypeline_cli/templates/`:
 - `init/` - Project scaffolding templates (databases.py, etl.py, tables.py, etc.)
 - `licenses/` - 14 different license templates with variable substitution
+- `pipelines/` - Pipeline templates with variable substitution:
+  - `runner.py.template` - Pipeline orchestrator with run(), pipeline(), run_processors(), _write_to_snowflake()
+  - `config.py.template` - Pipeline configuration with Database, Schema, TableConfig imports
+  - `README.md.template` - Pipeline documentation structure
+  - `processors_init.py.template` - Processors package marker
+  - `tests_init.py.template` - Integration tests package marker
 
 The `config.py` file defines `INIT_SCAFFOLD_FILES` list that maps template files to ProjectContext properties for destination paths.
+
+**Template Variable Substitution**:
+Pipeline templates use `string.Template` with variables:
+- `$class_name` - PascalCase class name with "Pipeline" suffix (e.g., "BeneficiaryClaimsPipeline")
+- `$pipeline_name` - Normalized name (e.g., "beneficiary_claims")
+- `$project_name` - Project name from ProjectContext for import paths
 
 ### Dependency Management Philosophy
 
@@ -102,20 +129,19 @@ The `dependency_parser.py` utility handles parsing dependency strings with versi
 
 ## Python Version Compatibility
 
-**Critical**: This codebase must support Python 3.10+ because:
-- Generated projects target Snowflake compatibility (requires 3.10+)
-- The CLI itself declares `requires-python = ">=3.10"`
+**Critical**: This codebase requires Python 3.12-3.13 because:
+- Generated projects target Snowflake compatibility (snowflake-snowpark-python supports up to Python 3.13)
+- The CLI itself declares `requires-python = ">=3.12"`
+- Generated projects declare `requires-python = ">=3.12,<3.14"`
+- `tomllib` is part of stdlib in Python 3.11+, so no compatibility shim needed
 
-**Compatibility pattern for tomllib**:
+**TOML handling**:
 ```python
-import sys
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
+import tomllib  # For reading TOML (stdlib in 3.11+)
+import tomli_w  # For writing TOML (separate package)
 ```
 
-This pattern is used in `toml_manager.py` and `project_context.py` because `tomllib` is stdlib in 3.11+ but requires the `tomli` backport for 3.10.
+This simplified approach is used in `toml_manager.py` and `project_context.py`.
 
 ## Project Structure
 
@@ -127,18 +153,118 @@ pypeline-cli/
 │   ├── commands/            # Click command definitions
 │   │   ├── init.py          # pypeline init
 │   │   ├── sync_deps.py     # pypeline sync-deps
-│   │   └── install.py       # pypeline install
+│   │   ├── install.py       # pypeline install
+│   │   └── create_pipeline.py   # pypeline create-pipeline
 │   ├── core/
 │   │   ├── create_project.py     # Orchestrates project creation
 │   │   └── managers/             # Manager classes for different concerns
+│   │       ├── project_context.py
+│   │       ├── toml_manager.py
+│   │       ├── dependencies_manager.py
+│   │       ├── license_manager.py
+│   │       ├── scaffolding_manager.py
+│   │       ├── pipeline_manager.py   # NEW: Pipeline creation
+│   │       └── git_manager.py
 │   ├── templates/
 │   │   ├── init/                 # Template files for generated projects
-│   │   └── licenses/             # License templates
+│   │   ├── licenses/             # License templates
+│   │   └── pipelines/            # NEW: Pipeline templates
+│   │       ├── runner.py.template
+│   │       ├── config.py.template
+│   │       ├── README.md.template
+│   │       ├── processors_init.py.template
+│   │       └── tests_init.py.template
 │   └── utils/
 │       ├── dependency_parser.py  # Parse dependency strings
-│       └── valdators.py          # Input validation
+│       ├── valdators.py          # Input validation
+│       └── name_converter.py     # NEW: Name normalization/conversion
 └── tests/                        # Test files
 ```
+
+## Pipeline Architecture
+
+### Generated Pipeline Structure
+
+When `pypeline create-pipeline --name beneficiary-claims` is run, it creates:
+
+```
+pipelines/beneficiary_claims/
+├── beneficiary_claims_runner.py    # Main orchestrator
+├── config.py                        # Pipeline-specific config with TableConfig
+├── README.md                        # Pipeline documentation
+├── processors/                      # Processor classes go here
+│   └── __init__.py
+└── tests/                           # Integration tests
+    └── __init__.py
+```
+
+### Pipeline Runner Pattern
+
+The generated runner follows this architecture (from scratch.py):
+
+```python
+class BeneficiaryClaimsPipeline:
+    def __init__(self):
+        self.logger = Logger()
+        self.etl = ETL()
+
+    @time_function("BeneficiaryClaimsPipeline.run")
+    def run(self, _write: bool = False):
+        """Entry point with timing decorator"""
+        self.pipeline(_write)
+
+    def pipeline(self, _write: bool):
+        """Orchestrates processors and conditional write"""
+        df = self.run_processors()
+        if _write:
+            self._write_to_snowflake(df, ...)
+
+    def run_processors(self) -> DataFrame:
+        """Instantiates and runs processor classes"""
+        # Processors import from ./processors/
+        # Each processor handles its own extract in __init__ using TableConfig
+        # Each processor has process() method for transformations
+
+    def _write_to_snowflake(self, df, write_mode, table_path):
+        """Uses df.write.mode().save_as_table()"""
+```
+
+### Processor Pattern (User-Created)
+
+Processors (created by users, will have `create-processor` command later):
+- Handle data extraction in `__init__` using TableConfig from `utils/tables.py`
+- Implement `process()` method as orchestrator for transformations
+- Use private methods for atomized transformation steps
+- Return DataFrames
+
+### Auto-Registration
+
+Pipeline classes are automatically registered in the package's `__init__.py`:
+
+```python
+# Generated in src/{project_name}/__init__.py
+from .pipelines.beneficiary_claims.beneficiary_claims_runner import BeneficiaryClaimsPipeline
+
+__all__ = ["BeneficiaryClaimsPipeline"]
+```
+
+This allows users to import pipelines directly:
+```python
+from my_project import BeneficiaryClaimsPipeline, EnrollmentPipeline
+```
+
+### Naming Conventions
+
+- **Input**: User provides name (e.g., `beneficiary-claims`, `enrollment`, `CLAIMS`)
+- **Normalization**: Convert to lowercase with underscores (e.g., `beneficiary_claims`)
+- **Folder/File**: Use normalized name (e.g., `pipelines/beneficiary_claims/beneficiary_claims_runner.py`)
+- **Class Name**: PascalCase + "Pipeline" suffix (e.g., `BeneficiaryClaimsPipeline`)
+- **Import**: Registered in `__init__.py` for top-level package import
+
+Handled by `utils/name_converter.py`:
+- `normalize_name()` - Strips whitespace, lowercases, converts hyphens to underscores
+- `to_pascal_case()` - Converts normalized name to PascalCase
+- Command adds "Pipeline" suffix to class name
 
 ## Key Conventions
 
@@ -147,3 +273,4 @@ pypeline-cli/
 - **Template naming**: Templates end with `.template` extension
 - **Manager initialization**: All managers receive `ProjectContext` instance
 - **Version management**: Projects use hatch-vcs for git tag-based versioning
+- **Pipeline naming**: Class names always have "Pipeline" suffix (e.g., `BeneficiaryClaimsPipeline`)

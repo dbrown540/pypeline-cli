@@ -20,14 +20,36 @@ def install():
         click.echo(f"✓ Virtual environment already exists at {venv_path}")
     else:
         click.echo("📦 Creating virtual environment...")
-        if platform.system == "Windows":
-            subprocess.run(
-                ["python", "-m", "venv", ".venv"], cwd=ctx.project_root, check=True
+        # Try to use Python 3.12-3.13 (required by generated projects, compatible with Snowflake)
+        python_cmd = None
+        for cmd in ["python3.13", "python3.12", "python3", "python"]:
+            try:
+                result = subprocess.run(
+                    [cmd, "--version"],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                # Extract version from output like "Python 3.12.0"
+                version_str = result.stdout.strip().split()[1]
+                major, minor = map(int, version_str.split(".")[:2])
+                # Accept Python 3.12 or 3.13 (Snowflake compatibility)
+                if major == 3 and 12 <= minor <= 13:
+                    python_cmd = cmd
+                    break
+            except (subprocess.CalledProcessError, FileNotFoundError, IndexError, ValueError):
+                continue
+
+        if not python_cmd:
+            raise click.ClickException(
+                "Could not find Python 3.12 or 3.13. Please install Python 3.12 or 3.13 and try again.\n"
+                "Note: Python 3.14+ is not yet supported by snowflake-snowpark-python."
             )
-        else:
-            subprocess.run(
-                ["python3", "-m", "venv", ".venv"], cwd=ctx.project_root, check=True
-            )
+
+        click.echo(f"Using {python_cmd} to create virtual environment...")
+        subprocess.run(
+            [python_cmd, "-m", "venv", ".venv"], cwd=ctx.project_root, check=True
+        )
         click.echo(f"✓ Created virtual environment at {venv_path}")
 
     # Determine pip path based on OS
@@ -39,17 +61,28 @@ def install():
     if not pip_path.exists():
         raise click.ClickException(f"pip not found at {pip_path}")
 
+    # Upgrade pip to latest version (required for modern editable installs)
+    click.echo("\n🔄 Upgrading pip to latest version...\n")
+    upgrade_result = subprocess.run(
+        [str(pip_path), "install", "--upgrade", "pip"],
+        cwd=ctx.project_root,
+    )
+
+    if upgrade_result.returncode != 0:
+        click.echo("\n⚠️  Warning: Failed to upgrade pip")
+        raise click.ClickException("Failed to upgrade pip")
+
+    click.echo("\n✓ pip upgraded successfully")
+
     # Install project in editable mode using the venv's pip
-    click.echo("\n🔧 Installing project dependencies...")
+    click.echo("\n🔧 Installing project dependencies...\n")
     result = subprocess.run(
         [str(pip_path), "install", "-e", "."],
         cwd=ctx.project_root,
-        capture_output=True,
-        text=True,
     )
 
     if result.returncode != 0:
-        click.echo(f"❌ Installation failed:\n{result.stderr}")
+        click.echo("\n❌ Installation failed")
         raise click.ClickException("Failed to install dependencies")
 
     click.echo("✅ Successfully installed dependencies!")

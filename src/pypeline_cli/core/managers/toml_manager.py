@@ -1,13 +1,8 @@
-import sys
 import click
+import tomllib
 import tomli_w
 
 from typing import List
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 from .project_context import ProjectContext
 from ...config import DEFAULT_DEPENDENCIES
@@ -37,7 +32,7 @@ class TOMLManager:
                 "authors": [{"name": author_name, "email": author_email}],
                 "description": description,
                 "readme": "README.md",
-                "requires-python": ">=3.10",
+                "requires-python": ">=3.12,<3.14",
                 "license": license,
                 "dependencies": DEFAULT_DEPENDENCIES.copy(),
             },

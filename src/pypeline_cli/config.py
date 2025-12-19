@@ -24,7 +24,7 @@ LICENSES = {
 # Default dependencies for new projects
 DEFAULT_DEPENDENCIES = [
     "snowflake-snowpark-python>=1.42.0",
-    "numpy>=2.3.4",
+    "numpy>=2.2.6",
     "pandas>=2.3.3",
     "build==1.3.0",
     "twine==6.2.0",
