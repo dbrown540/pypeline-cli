@@ -121,3 +121,7 @@ class ProjectContext:
     @property
     def _init_file(self) -> Path:
         return self.import_folder / "__init__.py"
+
+    @property
+    def table_cache_file(self) -> Path:
+        return self.project_utils_folder_path / "table_cache.py"

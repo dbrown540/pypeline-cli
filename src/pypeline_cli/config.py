@@ -93,4 +93,8 @@ INIT_SCAFFOLD_FILES = [
         template_name=PATH_TO_INIT_TEMPLATES / "_init.py.template",
         destination_property="_init_file",
     ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / "table_cache.py.template",
+        destination_property="table_cache_file",
+    ),
 ]
