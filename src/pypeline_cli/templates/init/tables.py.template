@@ -118,6 +118,7 @@ class TableConfig:
     table_name_template: str
     type: Literal["YEARLY", "MONTHLY", "STABLE"]
     month: Optional[Union[int, str]] = None
+    is_output: bool
 
     def generate_table_name(self, year: Optional[int] = None) -> str:
         """

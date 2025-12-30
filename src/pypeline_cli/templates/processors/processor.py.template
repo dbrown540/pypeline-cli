@@ -9,7 +9,7 @@ TODO: Add processor description here.
 - What are its inputs and outputs?
 """
 
-from typing import Final
+from typing import Final, Dict
 
 from snowflake.snowpark import DataFrame
 from snowflake.snowpark.functions import col
@@ -44,28 +44,13 @@ class $class_name:
         - Dependencies
     """
 
-    def __init__(self):
+    def __init__(self, cache):
         """
         Initialize processor and extract source data.
-
-        TODO:
-        1. Import TableConfig instances from ../config.py
-        2. Extract data using self.etl.session.table() or TableConfig
-        3. Store DataFrames as instance attributes for processing
-
-        Example:
-            from ..config import TABLE_CONFIGS
-
-            self.source_df = self.etl.session.table(
-                TABLE_CONFIGS["SOURCE_TABLE"].generate_table_name(year=2024)
-            )
         """
         self.logger = Logger()
         self.etl = ETL()
-
-        # TODO: Add data extraction logic here
-        # Example:
-        # self.source_df = self.etl.session.table("DATABASE.SCHEMA.TABLE")
+        self.cache: Dict[str, DataFrame] = cache
 
         self.logger.info(
             message=f"Initialized $class_name",
@@ -85,6 +70,7 @@ class $class_name:
 
         TODO: Implement transformation orchestration
         Example:
+            df = self.cache["extract"]
             df = self._transformation_step_1()
             df = self._transformation_step_2(df)
             df = self._final_cleanup(df)
