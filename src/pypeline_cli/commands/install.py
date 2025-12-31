@@ -37,7 +37,12 @@ def install():
                 if major == 3 and 12 <= minor <= 13:
                     python_cmd = cmd
                     break
-            except (subprocess.CalledProcessError, FileNotFoundError, IndexError, ValueError):
+            except (
+                subprocess.CalledProcessError,
+                FileNotFoundError,
+                IndexError,
+                ValueError,
+            ):
                 continue
 
         if not python_cmd:

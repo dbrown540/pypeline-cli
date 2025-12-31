@@ -97,7 +97,8 @@ class $class_name:
         """
         # Preload all input tables (non-output tables) into cache
         self.cache.preload_tables(
-            [k for k, config in TABLE_CONFIGS.items() if not config.is_output]
+            [k for k, config in TABLE_CONFIGS.items() if not config.is_output],
+            TABLE_CONFIGS
         )
 
         # TODO: Implement processor orchestration

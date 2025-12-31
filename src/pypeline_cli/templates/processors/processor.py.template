@@ -53,7 +53,7 @@ class $class_name:
         self.cache: Dict[str, DataFrame] = cache
 
         self.logger.info(
-            message=f"Initialized $class_name",
+            message="Initialized $class_name",
             context=MODULE_NAME
         )
 
