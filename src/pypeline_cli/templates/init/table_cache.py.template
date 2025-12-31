@@ -121,7 +121,7 @@ class TableCache:
             "table_keys": list(self._cache.keys())
         }
     
-    def _load_table(self, table_key: str, table_configs: Dict[str, TableConfig]) -> None:
+    def _load_table(self, table_key: str, table_configs: Dict[str, TableConfig], year: int | None) -> None:
         """
         Load a table and add it to the cache.
         
@@ -144,8 +144,21 @@ class TableCache:
             return
         
         table_config = table_configs[table_key]
-        table_name = table_config.generate_table_name()
+
+        if table_config.type == "STABLE":
+            table_name = table_config.generate_table_name()
         
+        elif table_config.type == "MONTHLY":
+            if not table_configs[table_key].month:
+                raise ValueError(f"{table_key} is a monthly table, but no month was provided.")
+            table_name = table_config.generate_table_name()
+
+        elif table_config.type == "YEARLY":
+            if not year:
+                raise ValueError(f"{table_key} is a yearly table, but no year was provided.")
+            table_name = table_config.generate_table_name(year)
+
+
         self.logger.info(
             message=f"Loading table into cache: {table_name}",
             context=MODULE_NAME,

@@ -3,6 +3,7 @@ from typing import cast, Tuple, TypedDict
 from zoneinfo import ZoneInfo
 
 from snowflake.snowpark import Session
+from .tables import TableConfig
 
 class TimestampResult(TypedDict):
     dt: datetime
@@ -61,3 +62,45 @@ def get_table_last_modified(
         "dt": dt_eastern,
         "iso": iso_string
     }
+
+def check_table_exists(
+    session: Session,
+    config: TableConfig | None,
+    year: int | None,
+    database_name: str | None,
+    schema_name: str | None,
+    table_name: str | None,
+) -> bool:
+    if database_name and schema_name and table_name:
+        return session.catalog.table_exists(
+            table_name, 
+            database_name, 
+            schema_name
+        )
+
+    elif config and year:
+        data = config.generate_parsed_table_path(year)
+        table_name = data["table"]
+        schema_name = data["schema"]
+        database_name = data["database"]
+
+        return session.catalog.table_exists(
+            table_name,
+            database_name,
+            schema_name
+        )
+    
+    elif config:
+        data = config.generate_parsed_table_path()
+        table_name = data["table"]
+        schema_name = data["schema"]
+        database_name = data["database"]
+
+        return session.catalog.table_exists(
+            table_name,
+            database_name,
+            schema_name
+        )
+    
+    else:
+        raise ValueError("You must either provide database and schema and table or config (optional: year)")
