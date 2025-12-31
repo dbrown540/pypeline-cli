@@ -1,8 +1,53 @@
 """
-utils/date_parser.py
+Timezone-Aware DateTime Management
 
-This module provides the DateTimeManager class for validating and structuring 
-timezone-aware datetime objects. All datetimes are normalized to UTC internally.
+✅ SAFE TO MODIFY - Customize as needed for your pipeline
+
+This file provides the DateTimeManager class for validating and normalizing
+timezone-aware datetime objects. All datetimes are normalized to UTC internally
+for consistency across your pipeline.
+
+Purpose:
+    Provides validation, normalization, and structured parsing of timezone-aware
+    datetime objects. Ensures all temporal data is properly timezone-aware and
+    normalized to UTC as the source of truth.
+
+Usage:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from pipelines.utils.date_parser import DateTimeManager
+
+    # Create timezone-aware datetimes
+    start_dt = datetime(2025, 3, 15, 14, 30, tzinfo=ZoneInfo("America/New_York"))
+    end_dt = datetime.now(ZoneInfo("UTC"))
+
+    # Validate and normalize
+    dt_manager = DateTimeManager(
+        is_required=True,
+        start_date=start_dt,
+        end_date=end_dt
+    )
+
+    # Access normalized UTC datetime
+    utc_start = dt_manager.get_utc_datetime("start_date")
+
+    # Access structured datetime information
+    parsed = dt_manager.parsed_datetimes["start_date"]
+    iso_utc = parsed["iso_string_utc"]        # "2025-03-15T19:30:00+00:00"
+    iso_eastern = parsed["iso_string_eastern"] # "2025-03-15T14:30:00-05:00"
+    year = parsed["year_utc"]                  # 2025
+    month = parsed["month_utc"]                # "03"
+    day = parsed["day_utc"]                    # "15"
+
+Design Pattern:
+    - UTC Normalization: All datetimes converted to UTC as source of truth
+    - Timezone Validation: Ensures all datetimes are timezone-aware
+    - Structured Output: Provides parsed components (year, month, day) in UTC
+    - Display Timezone: Includes Eastern timezone for user-facing displays
+
+Customization:
+    Feel free to modify this file to add additional timezone conversions,
+    validation rules, or datetime parsing utilities specific to your use case.
 """
 
 from datetime import datetime, timezone
@@ -48,14 +93,36 @@ class DateTimeManager:
 
     def __init__(self, is_required: bool, **kwargs: Optional[datetime]) -> None:
         """
-        Initialize DateTimeManager.
+        Initialize DateTimeManager with timezone-aware datetime validation.
 
         Args:
-            is_required (bool): Whether the datetimes are required.
-            **kwargs (Optional[datetime]): Timezone-aware datetime objects to be validated.
+            is_required (bool): Whether the datetimes are required. If True, raises
+                ValueError for missing or timezone-naive datetimes. If False, logs
+                warnings and skips invalid datetimes.
+            **kwargs (Optional[datetime]): Named timezone-aware datetime objects to
+                validate and normalize. Use descriptive names (e.g., start_date,
+                end_date, processing_time).
 
         Raises:
-            ValueError: If a required datetime is missing or lacks timezone info.
+            ValueError: If is_required=True and a datetime is missing or lacks
+                timezone information.
+
+        Examples:
+            >>> from datetime import datetime
+            >>> from zoneinfo import ZoneInfo
+            >>>
+            >>> # Required datetimes
+            >>> dt_mgr = DateTimeManager(
+            ...     is_required=True,
+            ...     start_date=datetime(2025, 1, 1, tzinfo=ZoneInfo("America/New_York")),
+            ...     end_date=datetime.now(ZoneInfo("UTC"))
+            ... )
+            >>>
+            >>> # Optional datetimes
+            >>> dt_mgr = DateTimeManager(
+            ...     is_required=False,
+            ...     processing_time=None  # Will log warning but not raise
+            ... )
         """
         self.is_required: bool = is_required
         self._kwargs: Dict[str, Optional[datetime]] = kwargs
@@ -142,12 +209,30 @@ class DateTimeManager:
     def get_utc_datetime(self, name: str) -> Optional[datetime]:
         """
         Get the UTC-normalized datetime by name.
-        
+
         Args:
-            name (str): The name of the datetime.
-            
+            name (str): The name of the datetime passed to __init__.
+
         Returns:
-            Optional[datetime]: The UTC datetime, or None if not found.
+            Optional[datetime]: The UTC-normalized datetime object, or None if the
+                datetime was not provided or failed validation.
+
+        Examples:
+            >>> from datetime import datetime
+            >>> from zoneinfo import ZoneInfo
+            >>>
+            >>> dt_mgr = DateTimeManager(
+            ...     is_required=True,
+            ...     start_date=datetime(2025, 3, 15, 14, 30, tzinfo=ZoneInfo("America/New_York"))
+            ... )
+            >>> utc_dt = dt_mgr.get_utc_datetime("start_date")
+            >>> print(utc_dt)
+            2025-03-15 19:30:00+00:00
+            >>>
+            >>> # Non-existent datetime
+            >>> missing = dt_mgr.get_utc_datetime("nonexistent")
+            >>> print(missing)
+            None
         """
         parsed = self.parsed_datetimes.get(name)
         return parsed["datetime_utc"] if parsed else None

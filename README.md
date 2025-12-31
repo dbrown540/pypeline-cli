@@ -19,6 +19,7 @@
 - [Quick Start Tutorial](#quick-start-tutorial)
 - [Command Reference](#command-reference)
 - [Project Structure](#project-structure)
+- [Example Generated Structures](#example-generated-structures)
 - [Development Workflow](#development-workflow)
 - [ETL Architecture & Best Practices](#etl-architecture--best-practices)
 - [Built-in Utilities](#built-in-utilities)
@@ -59,7 +60,7 @@ pypeline-cli generates opinionated, production-ready project structures that fol
 
 ## Philosophy
 
-pypeline-cli is built on several core principles:
+pypeline-cli is built on several core principles that guide how data pipelines are structured and organized:
 
 ### 1. **Convention Over Configuration**
 Projects follow a standardized structure. This means:
@@ -69,22 +70,75 @@ Projects follow a standardized structure. This means:
 
 ### 2. **Separation of Concerns**
 Clear boundaries between different pipeline components:
-- **Pipelines** orchestrate high-level workflow
-- **Processors** handle Extract and Transform logic
-- **Utilities** provide cross-cutting concerns (logging, sessions, timing)
-- **Config** centralizes table and database definitions
+
+- **Processors** - A processor is a cohesive group of **atomized transformations**. Each processor:
+  - Receives pre-loaded data via TableCache (Extract is done at pipeline level)
+  - Orchestrates transformations in `process()` (Transform phase)
+  - Contains private methods that perform single, focused transformations
+  - Represents a logical unit of work (e.g., "enrich customer data", "calculate metrics")
+  - Returns a transformed DataFrame ready for the next stage
+
+- **Pipelines** - A pipeline is an **organized sequence of processors**. Each pipeline:
+  - **Handles Extract**: Pre-loads all input tables into TableCache in `__init__()`
+  - **Orchestrates Transform**: Instantiates processors with shared cache, chains transformations
+  - **Handles Load**: Writes final output via `_write_to_snowflake()`
+  - Manages the high-level workflow and business logic
+  - Provides conditional write logic with the `_write` flag
+
+- **Utilities** - Framework-provided tools that handle cross-cutting concerns:
+  - **ETL Singleton**: Manages Snowpark session lifecycle
+  - **Logger**: Structured, color-coded logging with context
+  - **TableConfig**: Dynamic table naming with time-based partitioning
+  - **TableCache**: Pre-loads and caches input tables for efficiency
+  - **Decorators**: Performance timing, table existence checks, freshness validation
+  - **Databases/Schemas**: Centralized constants for environment configuration
+
+- **Config** - Configuration files that centralize definitions:
+  - **databases.py**: Database and schema name constants
+  - **tables.py**: TableConfig instances for all data sources
+  - **columns.py**: Column generation utilities for dynamic schemas
+  - **Pipeline config.py**: Pipeline-specific table configurations
+
+**The Core Pattern:**
+```
+Pipeline.__init__()
+    ↓
+Extract: Pre-load all input tables into TableCache
+    ↓
+Processor 1(cache)
+    ↓
+Transform: Access cached tables, apply atomized transformations
+    ↓
+Processor 2(cache)
+    ↓
+Transform: Further transformations, aggregations
+    ↓
+Processor 3(cache)
+    ↓
+Transform: Final transformations
+    ↓
+Pipeline._write_to_snowflake()
+    ↓
+Load: Write final DataFrame to Snowflake
+```
+
+**Key Insight:** Extract happens **once** at the pipeline level (via TableCache). Each processor receives the pre-loaded cache and focuses purely on **Transform** logic. This eliminates redundant queries and ensures all processors work with identical data snapshots.
 
 ### 3. **Developer Experience First**
 - Edit dependencies in Python, not TOML
-- Automatic import registration
+- Automatic import registration for pipelines and processors
 - CLI-driven scaffolding reduces copy-paste errors
 - Framework files marked "DO NOT MODIFY" for clarity
+- User-editable files clearly documented
+- Auto-generated test scaffolding with pytest fixtures
 
 ### 4. **Production-Ready from Day One**
 - Singleton ETL pattern prevents session leaks
 - Structured logging with context and timestamps
 - Performance timing decorators built-in
-- Git integration and proper versioning
+- Git integration and proper versioning (hatch-vcs)
+- TableCache pattern reduces redundant Snowflake queries
+- Comprehensive error handling and validation
 
 ---
 
@@ -120,13 +174,7 @@ Clear boundaries between different pipeline components:
 
 ## Installation
 
-### Using pipx (Recommended)
-
-```bash
-pipx install pypeline-cli
-```
-
-### Using pip
+### Using pip (Recommended)
 
 ```bash
 pip install pypeline-cli
@@ -244,68 +292,101 @@ The pipeline is automatically registered in your package's `__init__.py`, allowi
 from customer_analytics import CustomerSegmentationPipeline
 ```
 
-### Step 5: Create Processors
+### Step 5: Configure Pipeline Tables
 
-Processors handle the Extract and Transform logic. Create a processor for each data source or transformation concern:
+Before creating processors, define your table configurations in `customer_analytics/pipelines/customer_segmentation/config.py`:
+
+```python
+from ..utils.tables import TableConfig
+from ..utils.databases import Database, Schema
+
+# Define all tables used by this pipeline
+TABLE_CONFIGS = {
+    # Input tables (will be pre-loaded into cache)
+    "sales": TableConfig(
+        database=Database.RAW,
+        schema=Schema.LANDING,
+        table_name_template="sales_{MM}",
+        type="MONTHLY",
+        month=1,  # Will be set dynamically
+        is_output=False
+    ),
+    "customers": TableConfig(
+        database=Database.PROD,
+        schema=Schema.DIM,
+        table_name_template="dim_customers",
+        type="STABLE",
+        is_output=False
+    ),
+    # Output table (not pre-loaded)
+    "output": TableConfig(
+        database=Database.PROD,
+        schema=Schema.ANALYTICS,
+        table_name_template="customer_segments_{MM}",
+        type="MONTHLY",
+        month=1,
+        is_output=True
+    )
+}
+```
+
+### Step 6: Create Processors
+
+Create a processor for each transformation concern:
 
 ```bash
-pypeline create-processor --name sales-extractor --pipeline customer-segmentation
+pypeline create-processor --name sales-transformer --pipeline customer-segmentation
 pypeline create-processor --name customer-enrichment --pipeline customer-segmentation
 pypeline create-processor --name segmentation-logic --pipeline customer-segmentation
 ```
 
 Each processor is scaffolded with:
-- `__init__()` method for data extraction
+- `__init__(cache)` method that receives pre-loaded TableCache
 - `process()` method for transformations
 - Logger and ETL utilities auto-instantiated
 - Unit test file with pytest fixtures
 
-### Step 6: Implement Processor Logic
+### Step 7: Implement Processor Logic
 
-Edit `customer_analytics/pipelines/customer_segmentation/processors/sales_extractor_processor.py`:
+Edit `customer_analytics/pipelines/customer_segmentation/processors/sales_transformer_processor.py`:
 
 ```python
 from typing import Final
 from snowflake.snowpark import DataFrame
-from snowflake.snowpark.functions import col, sum as sum_, count
+from snowflake.snowpark.functions import col, sum_ as sum_, count
 
-from ....utils.etl import ETL
 from ....utils.logger import Logger
 from ....utils.decorators import time_function
-from ..config import SALES_MONTHLY  # Import from pipeline config
 
-MODULE_NAME: Final[str] = "pipelines/customer_segmentation/processors/sales_extractor_processor.py"
+MODULE_NAME: Final[str] = "pipelines/customer_segmentation/processors/sales_transformer_processor.py"
 
 
-class SalesExtractorProcessor:
+class SalesTransformerProcessor:
     """
-    Extracts sales data from monthly partitioned tables.
+    Transforms sales data from pre-loaded cache.
 
-    This processor reads from the SALES_MONTHLY table configuration and
-    performs initial transformations to prepare data for enrichment.
+    This processor accesses pre-loaded sales and customer data from the cache
+    and performs transformations to prepare data for segmentation.
     """
 
-    def __init__(self, month: int):
+    def __init__(self, cache: Dict[str, DataFrame]):
         """
-        Initialize and extract sales data for specified month.
+        Initialize with pre-populated cache from pipeline.
 
         Args:
-            month: Month number (1-12) to extract
+            cache: TableCache with pre-loaded input tables
         """
         self.logger = Logger()
-        self.etl = ETL()
-        self.month = month
+        self.cache = cache
 
-        # Extract: Read from Snowflake using TableConfig
-        SALES_MONTHLY.month = month
-        table_name = SALES_MONTHLY.generate_table_name()
+        # Access pre-loaded tables from cache (no Snowflake query)
+        self.sales_df = cache.get_table("sales")
+        self.customers_df = cache.get_table("customers")
 
         self.logger.info(
-            message=f"Extracting sales data from {table_name}",
+            message="Initialized SalesTransformerProcessor with cached tables",
             context=MODULE_NAME
         )
-
-        self.raw_sales_df = self.etl.session.table(table_name)
 
     @time_function(f"{MODULE_NAME}.process")
     def process(self) -> DataFrame:
@@ -320,9 +401,10 @@ class SalesExtractorProcessor:
             context=MODULE_NAME
         )
 
-        # Apply transformations
+        # Apply transformations using cached data
         df = self._filter_valid_transactions()
-        df = self._aggregate_by_customer()
+        df = self._aggregate_by_customer(df)
+        df = self._enrich_with_customer_info(df)
         df = self._calculate_metrics(df)
 
         return df
@@ -334,21 +416,41 @@ class SalesExtractorProcessor:
         Returns:
             Filtered DataFrame
         """
-        return self.raw_sales_df.filter(
+        return self.sales_df.filter(
             (col("STATUS") == "COMPLETED") &
             (col("AMOUNT") > 0)
         )
 
-    def _aggregate_by_customer(self) -> DataFrame:
+    def _aggregate_by_customer(self, df: DataFrame) -> DataFrame:
         """
         Aggregate sales metrics by customer.
+
+        Args:
+            df: Filtered sales DataFrame
 
         Returns:
             DataFrame with customer-level aggregates
         """
-        return self.raw_sales_df.group_by("CUSTOMER_ID").agg(
+        return df.group_by("CUSTOMER_ID").agg(
             sum_("AMOUNT").alias("TOTAL_SALES"),
             count("TRANSACTION_ID").alias("TRANSACTION_COUNT")
+        )
+
+    def _enrich_with_customer_info(self, df: DataFrame) -> DataFrame:
+        """
+        Join with customer data from cache.
+
+        Args:
+            df: Aggregated sales DataFrame
+
+        Returns:
+            DataFrame enriched with customer information
+        """
+        # Use pre-loaded customer data (no additional query)
+        return df.join(
+            self.customers_df.select("CUSTOMER_ID", "CUSTOMER_TIER", "REGION"),
+            on="CUSTOMER_ID",
+            how="left"
         )
 
     def _calculate_metrics(self, df: DataFrame) -> DataFrame:
@@ -356,7 +458,7 @@ class SalesExtractorProcessor:
         Calculate derived metrics like average order value.
 
         Args:
-            df: Aggregated DataFrame
+            df: Enriched DataFrame
 
         Returns:
             DataFrame with calculated metrics
@@ -367,7 +469,7 @@ class SalesExtractorProcessor:
         )
 ```
 
-### Step 7: Wire Processors in Pipeline Runner
+### Step 8: Wire Processors in Pipeline Runner
 
 Edit `customer_analytics/pipelines/customer_segmentation/customer_segmentation_runner.py`:
 
@@ -380,9 +482,11 @@ from snowflake.snowpark import DataFrame
 from ...utils.etl import ETL
 from ...utils.logger import Logger
 from ...utils.decorators import time_function
+from ...utils.table_cache import TableCache
+from .config import TABLE_CONFIGS
 
 # Import processors (auto-added by create-processor command)
-from .processors.sales_extractor_processor import SalesExtractorProcessor
+from .processors.sales_transformer_processor import SalesTransformerProcessor
 from .processors.customer_enrichment_processor import CustomerEnrichmentProcessor
 from .processors.segmentation_logic_processor import SegmentationLogicProcessor
 
@@ -393,13 +497,13 @@ class CustomerSegmentationPipeline:
     """
     Customer segmentation pipeline.
 
-    Extracts sales data, enriches with customer attributes, and applies
-    segmentation logic to classify customers into segments.
+    Pre-loads sales and customer data, applies transformations through processors,
+    and writes customer segments to Snowflake.
     """
 
     def __init__(self, month: int):
         """
-        Initialize pipeline.
+        Initialize pipeline, pre-load all input tables, and instantiate processors.
 
         Args:
             month: Month to process (1-12)
@@ -407,6 +511,26 @@ class CustomerSegmentationPipeline:
         self.logger = Logger()
         self.etl = ETL()
         self.month = month
+
+        # Update month in table configs
+        TABLE_CONFIGS["sales"].month = month
+        TABLE_CONFIGS["output"].month = month
+
+        # EXTRACT: Pre-load all input tables into cache (one-time operation)
+        self.cache = TableCache().preload_tables(
+            table_keys=[k for k, config in TABLE_CONFIGS.items() if not config.is_output],
+            table_configs=TABLE_CONFIGS
+        )
+
+        self.logger.info(
+            message=f"Pre-loaded {len(self.cache.tables)} input tables into cache",
+            context=MODULE_NAME
+        )
+
+        # Instantiate all processors with shared cache (auto-registered)
+        self.sales_transformer = SalesTransformerProcessor(self.cache)
+        self.customer_enrichment = CustomerEnrichmentProcessor(self.cache)
+        self.segmentation_logic = SegmentationLogicProcessor(self.cache)
 
     @time_function("CustomerSegmentationPipeline.run")
     def run(self, _write: bool = False):
@@ -429,30 +553,26 @@ class CustomerSegmentationPipeline:
         Args:
             _write: If True, writes results to Snowflake
         """
+        # TRANSFORM: Run processors with shared cache
         df: DataFrame = self.run_processors()
 
+        # LOAD: Conditionally write to Snowflake
         if _write:
-            table_path = f"PRODUCTION.ANALYTICS.customer_segments_{self.month:02d}"
+            output_config = TABLE_CONFIGS["output"]
+            table_path = output_config.generate_table_name()
             self._write_to_snowflake(df, write_mode="overwrite", table_path=table_path)
 
     def run_processors(self) -> DataFrame:
         """
-        Instantiate and run processors in sequence.
+        Execute processors in sequence using pre-instantiated processor instances.
 
         Returns:
             Final DataFrame with customer segments
         """
-        # Extract sales data
-        sales_processor = SalesExtractorProcessor(month=self.month)
-        sales_df = sales_processor.process()
-
-        # Enrich with customer data
-        enrichment_processor = CustomerEnrichmentProcessor(sales_df=sales_df)
-        enriched_df = enrichment_processor.process()
-
-        # Apply segmentation logic
-        segmentation_processor = SegmentationLogicProcessor(enriched_df=enriched_df)
-        segmented_df = segmentation_processor.process()
+        # Use pre-instantiated processors from __init__
+        sales_df = self.sales_transformer.process()
+        enriched_df = self.customer_enrichment.process(sales_df)
+        segmented_df = self.segmentation_logic.process(enriched_df)
 
         return segmented_df
 
@@ -488,24 +608,29 @@ if __name__ == "__main__":
     pipeline.run(_write=True)
 ```
 
-### Step 8: Run Your Pipeline
+### Step 9: Build for Snowflake Deployment
+
+Build a Snowflake-compatible ZIP archive of your project:
 
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Run the pipeline
-python -m customer_analytics.pipelines.customer_segmentation.customer_segmentation_runner
+# From project root
+pypeline build
 ```
 
-Or import and run programmatically:
-
-```python
-from customer_analytics import CustomerSegmentationPipeline
-
-pipeline = CustomerSegmentationPipeline(month=3)
-pipeline.run(_write=True)
+**Output:**
 ```
+dist/
+└── snowflake/
+    └── customer_analytics-0.1.0.zip
+```
+
+The build command:
+- Creates a ZIP with `pyproject.toml` at root level (required by Snowflake)
+- Includes your package and all dependencies configuration
+- Excludes build artifacts, virtual environments, and cache files
+- Verifies the structure is Snowflake-compatible
+
+You can now upload this ZIP to a Snowflake stage and use it in stored procedures or UDFs.
 
 ---
 
@@ -537,16 +662,46 @@ pypeline init \
 - `--git / --no-git` - Initialize git repository (default: disabled)
 
 **What it creates:**
-- Project directory with src-layout
-- Git repository with initial commit (if `--git` flag used)
-- `pyproject.toml` with either:
-  - Git-based versioning (if `--git`): Uses hatch-vcs, version from git tags
-  - Manual versioning (if `--no-git`): Static version "0.1.0"
-- Utility modules in `{project}/utils/`
-- Test directory structure
-- `dependencies.py` for dependency management
-- LICENSE file
-- `.gitignore` and optionally `.gitattributes` (if using git)
+
+Complete project scaffolding:
+
+```
+my_pipeline/
+├── pyproject.toml                   # Package configuration
+│                                    # - Git-based versioning (if --git)
+│                                    # - Manual version "0.1.0" (if --no-git)
+├── dependencies.py                  # ✏️ User-editable dependency list
+├── LICENSE                          # Selected license file
+├── README.md                        # Project documentation template
+├── .gitignore                       # Python .gitignore (4500+ lines)
+├── .gitattributes                   # Line ending config (if --git)
+├── my_pipeline/                     # Main package (no src/ folder)
+│   ├── __init__.py                  # Package exports
+│   ├── _version.py                  # Auto-generated version (if --git)
+│   ├── pipelines/                   # Pipeline orchestrators
+│   │   └── __init__.py
+│   ├── schemas/                     # Database schemas (user-created)
+│   │   └── __init__.py
+│   └── utils/                       # Framework utilities
+│       ├── __init__.py
+│       ├── columns.py               # ✏️ Column generation utilities
+│       ├── databases.py             # ✏️ Database/schema constants
+│       ├── tables.py                # ✏️ TableConfig definitions
+│       ├── decorators.py            # ⚙️ Timing, checks, validation
+│       ├── etl.py                   # ⚙️ Snowpark session singleton
+│       ├── logger.py                # ⚙️ Structured logging
+│       ├── table_cache.py           # ⚙️ Table pre-loading cache
+│       ├── date_parser.py           # ⚙️ Date utilities
+│       └── snowflake_utils.py       # ⚙️ Snowflake helpers
+└── tests/                           # Integration tests
+    └── basic_test.py                # Placeholder test
+```
+
+**Legend:**
+- **✏️ USER EDITABLE** - Safe and encouraged to modify
+- **⚙️ FRAMEWORK** - Auto-generated, do not modify (marked in file headers)
+
+Git repository with initial commit is created if `--git` flag is used.
 
 ---
 
@@ -734,24 +889,6 @@ pypeline build ensures the correct structure automatically.
 - `.git/` - Git repository
 - `*.pyc`, `*.pyo`, `.DS_Store` - Build artifacts
 
-**Upload to Snowflake:**
-```sql
--- From SnowSQL or Snowflake worksheet
-PUT file://dist/snowflake/my_project-0.1.0.zip @your_stage AUTO_COMPRESS=FALSE;
-
--- Verify upload
-LIST @your_stage;
-
--- Use in Snowpark procedure or UDF
-CREATE OR REPLACE PROCEDURE run_customer_segmentation()
-RETURNS STRING
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.12'
-PACKAGES = ('snowflake-snowpark-python')
-IMPORTS = ('@your_stage/my_project-0.1.0.zip')
-HANDLER = 'my_project.pipelines.customer_segmentation.customer_segmentation_runner.CustomerSegmentationPipeline.run';
-```
-
 **Requirements:**
 - Must run from within a pypeline project (looks for `pyproject.toml` with `[tool.pypeline]`)
 - Project must have valid `pyproject.toml`
@@ -802,6 +939,444 @@ my_pipeline/
 
 - **✏️ USER EDITABLE** - Safe and encouraged to modify
 - **⚙️ FRAMEWORK** - Auto-generated, do not modify (marked in file headers)
+
+---
+
+## Example Generated Structures
+
+### Complete Project Example
+
+Here's what `pypeline init --name customer_analytics` creates:
+
+```
+customer_analytics/
+├── pyproject.toml                      # Auto-generated project config
+├── dependencies.py                     # ✏️ User-managed dependency list
+├── LICENSE                             # Selected license (MIT, Apache, etc.)
+├── README.md                           # Project documentation template
+├── .gitignore                          # Python .gitignore (4500+ lines)
+├── .gitattributes                      # Line ending config (if using --git)
+├── customer_analytics/                 # Main package
+│   ├── __init__.py                     # Auto-registered pipeline imports
+│   ├── pipelines/                      # Pipeline implementations
+│   │   └── __init__.py
+│   ├── schemas/                        # Data schema definitions
+│   │   └── __init__.py
+│   └── utils/                          # Utility modules
+│       ├── __init__.py
+│       ├── columns.py                  # ✏️ Column generation utilities
+│       ├── databases.py                # ✏️ Database/schema constants
+│       ├── tables.py                   # ✏️ TableConfig definitions
+│       ├── decorators.py               # ⚙️ Timing, checks, validation
+│       ├── etl.py                      # ⚙️ Snowpark session singleton
+│       ├── logger.py                   # ⚙️ Structured logging
+│       ├── table_cache.py              # ⚙️ Table pre-loading cache
+│       ├── date_parser.py              # ⚙️ Date utilities
+│       └── snowflake_utils.py          # ⚙️ Snowflake helpers
+└── tests/                              # Integration tests
+    └── basic_test.py                   # Placeholder test
+```
+
+---
+
+### Pipeline Structure Example
+
+After running `pypeline create-pipeline --name customer-segmentation`:
+
+```
+customer_analytics/pipelines/customer_segmentation/
+├── __init__.py
+├── customer_segmentation_runner.py     # Main pipeline orchestrator
+├── config.py                            # Pipeline-specific TableConfigs
+├── README.md                            # Pipeline documentation
+├── processors/                          # Processor implementations
+│   └── __init__.py
+└── tests/                               # Integration tests
+    └── __init__.py
+```
+
+**Key Components:**
+
+The generated `customer_segmentation_runner.py` includes:
+
+- **`__init__()`** - Initializes Logger, ETL, and TableCache for pre-loading input tables
+- **`run(_write: bool)`** - Entry point with `@time_function` decorator
+- **`pipeline(_write: bool)`** - Orchestrates processors and conditional write logic
+- **`run_processors()`** - Instantiates and chains processor transformations
+- **`_write_to_snowflake()`** - Writes final DataFrame to Snowflake
+
+The generated `config.py` provides:
+- Import statements for `Database`, `Schema`, `TableConfig`, and `MonthlyColumnConfig`
+- TODO comments with examples for defining TABLE_CONFIGS
+- TODO comments with examples for monthly column configurations
+- Structure for pipeline-specific constants
+
+For complete implementation examples with TableCache usage, processor instantiation, and TableConfig definitions, see the [Quick Start Tutorial](#quick-start-tutorial) above.
+
+**Generated `config.py`:**
+
+```python
+"""
+CustomerSegmentationPipeline Pipeline Configuration
+
+Pipeline-specific constants and configuration values.
+
+This module imports from the project's utility modules (databases.py, tables.py, columns.py)
+to help you define pipeline-specific table configurations and constants.
+"""
+
+from typing import Dict, Final
+
+# Import project utilities - customize as needed
+from ...utils.databases import Database, Schema
+from ...utils.tables import TableConfig
+from ...utils.columns import MonthlyColumnConfig
+
+# TODO: Add pipeline-specific configuration
+# Examples:
+# - Table configurations using TableConfig
+# - Source and destination table definitions
+# - Date ranges and processing parameters
+# - Feature flags
+
+# Example table configurations using Dict[str, TableConfig]:
+# TABLE_CONFIGS: Dict[str, TableConfig] = {
+#     "source": TableConfig(
+#         database=Database.PRODUCTION,
+#         schema=Schema.RAW,
+#         table_name_template="source_data_{YYYY}",
+#         type="YEARLY",
+#         is_output=False
+#     ),
+#     "destination": TableConfig(
+#         database=Database.ANALYTICS,
+#         schema=Schema.PROCESSED,
+#         table_name_template="customer_segmentation_output",
+#         type="STABLE"
+#         is_output=True
+#     )
+# }
+
+# Example monthly column configurations using Dict[str, MonthlyColumnConfig]:
+# MONTHLY_COLUMNS: Dict[str, MonthlyColumnConfig] = {
+#     "revenue": MonthlyColumnConfig(
+#         prefix="rev_",
+#         length=12,
+#         format_type="currency",
+#         label_template="{month} Revenue"
+#     ),
+#     "units": MonthlyColumnConfig(
+#         prefix="units_",
+#         length=12,
+#         format_type="integer",
+#         label_template="{month} Units Sold",
+#         _output_prefix="unit_count_"
+#     )
+# }
+
+# Example constants:
+# PIPELINE_NAME: Final[str] = "customer_segmentation"
+# PROCESSING_START_DATE: Final[str] = "2024-01-01"
+```
+
+---
+
+### Processor Structure Example
+
+After running `pypeline create-processor --name sales-enrichment --pipeline customer-segmentation`:
+
+```
+customer_analytics/pipelines/customer_segmentation/processors/
+├── __init__.py
+├── sales_enrichment_processor.py       # Processor implementation
+└── tests/
+    ├── __init__.py
+    └── test_sales_enrichment_processor.py  # Unit tests
+```
+
+**Generated `sales_enrichment_processor.py`:**
+
+```python
+from pathlib import Path
+from typing import Final
+
+from snowflake.snowpark import DataFrame
+
+from ....utils.etl import ETL
+from ....utils.logger import Logger
+from ....utils.decorators import time_function
+from ....utils.table_cache import TableCache
+
+MODULE_NAME: Final[str] = Path(__file__).name
+
+
+class SalesEnrichmentProcessor:
+    """
+    Sales enrichment processor.
+
+    TODO: Add processor description and transformation logic overview.
+    """
+
+    def __init__(self, cache: TableCache):
+        """
+        Initialize processor and extract data.
+
+        Args:
+            cache: Pre-populated TableCache from pipeline
+        """
+        self.logger = Logger()
+        self.etl = ETL()
+        self.cache = cache
+
+        # TODO: Extract data using cache
+        # self.sales_df = cache.get_table("sales")
+
+        self.logger.info(
+            message="Initialized SalesEnrichmentProcessor",
+            context=MODULE_NAME
+        )
+
+    @time_function(f"{MODULE_NAME}.process")
+    def process(self) -> DataFrame:
+        """
+        Transform data through orchestrated steps.
+
+        TODO: Implement transformation logic
+
+        Returns:
+            Transformed DataFrame
+        """
+        self.logger.info(
+            message="Processing sales enrichment transformations",
+            context=MODULE_NAME
+        )
+
+        # TODO: Chain transformation methods
+        # df = self._filter_valid_sales()
+        # df = self._enrich_with_customer_data(df)
+        # df = self._calculate_metrics(df)
+        # return df
+
+        pass
+
+    # TODO: Add private transformation methods
+    # def _filter_valid_sales(self) -> DataFrame:
+    #     """Filter to valid sales records."""
+    #     pass
+```
+
+**Generated `test_sales_enrichment_processor.py`:**
+
+```python
+import pytest
+from unittest.mock import Mock, MagicMock
+from snowflake.snowpark import DataFrame
+
+from customer_analytics.pipelines.customer_segmentation.processors.sales_enrichment_processor import (
+    SalesEnrichmentProcessor
+)
+
+
+@pytest.fixture
+def mock_snowpark_session():
+    """Mock Snowpark session."""
+    return Mock()
+
+
+@pytest.fixture
+def mock_dataframe(mock_snowpark_session):
+    """Mock Snowpark DataFrame."""
+    df = MagicMock(spec=DataFrame)
+    df.session = mock_snowpark_session
+    return df
+
+
+@pytest.fixture
+def mock_cache(mock_dataframe):
+    """Mock TableCache with pre-loaded tables."""
+    cache = Mock()
+    cache.get_table.return_value = mock_dataframe
+    return cache
+
+
+def test_sales_enrichment_processor_init(mock_cache):
+    """Test SalesEnrichmentProcessor initialization."""
+    processor = SalesEnrichmentProcessor(cache=mock_cache)
+
+    assert processor is not None
+    assert processor.logger is not None
+    assert processor.etl is not None
+    assert processor.cache == mock_cache
+
+
+def test_sales_enrichment_processor_process(mock_cache, mock_dataframe):
+    """Test SalesEnrichmentProcessor.process() method."""
+    processor = SalesEnrichmentProcessor(cache=mock_cache)
+
+    # TODO: Add test assertions for process() method
+    # result = processor.process()
+    # assert result is not None
+    pass
+```
+
+---
+
+### Import Auto-Registration Example
+
+**Package `__init__.py` after creating pipelines:**
+
+```python
+# customer_analytics/__init__.py
+# Auto-generated imports - DO NOT EDIT MANUALLY
+
+from .pipelines.customer_segmentation.customer_segmentation_runner import CustomerSegmentationPipeline
+from .pipelines.order_fulfillment.order_fulfillment_runner import OrderFulfillmentPipeline
+from .pipelines.inventory_sync.inventory_sync_runner import InventorySyncPipeline
+
+__all__ = [
+    "CustomerSegmentationPipeline",
+    "OrderFulfillmentPipeline",
+    "InventorySyncPipeline",
+]
+```
+
+**Pipeline runner after creating processors:**
+
+```python
+# customer_segmentation_runner.py
+# Auto-registered processor imports
+
+from .processors.sales_extractor_processor import SalesExtractorProcessor
+from .processors.customer_enrichment_processor import CustomerEnrichmentProcessor
+from .processors.segmentation_logic_processor import SegmentationLogicProcessor
+
+class CustomerSegmentationPipeline:
+    def __init__(self):
+        self.logger = Logger()
+        self.etl = ETL()
+        self.cache = TableCache()
+
+        # Auto-registered processor instances
+        self.sales_extractor = SalesExtractorProcessor(self.cache)
+        self.customer_enrichment = CustomerEnrichmentProcessor(self.cache)
+        self.segmentation_logic = SegmentationLogicProcessor(self.cache)
+```
+
+---
+
+### Dependencies Management Example
+
+**`dependencies.py` structure:**
+
+```python
+"""
+Project dependencies management.
+
+Edit the USER_DEPENDENCIES list below, then run:
+    pypeline sync-deps
+
+DO NOT EDIT the BASE_DEPENDENCIES section - it's auto-generated.
+"""
+
+# ============================================================================
+# BASE DEPENDENCIES (Auto-generated - DO NOT MODIFY)
+# ============================================================================
+BASE_DEPENDENCIES = [
+    "snowflake-snowpark-python>=1.42.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "build>=1.2.2",
+    "pytest>=8.3.0",
+    "ruff>=0.11.0",
+]
+
+# ============================================================================
+# USER DEPENDENCIES (Edit this section)
+# ============================================================================
+USER_DEPENDENCIES = [
+    "requests>=2.31.0",
+    "pydantic>=2.5.0",
+    "python-dateutil>=2.8.2",
+]
+
+# Final merged list
+DEFAULT_DEPENDENCIES = BASE_DEPENDENCIES + USER_DEPENDENCIES
+```
+
+**After running `pypeline sync-deps`, `pyproject.toml` is updated:**
+
+```toml
+[project]
+dependencies = [
+    "snowflake-snowpark-python>=1.42.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "build>=1.2.2",
+    "pytest>=8.3.0",
+    "ruff>=0.11.0",
+    "requests>=2.31.0",
+    "pydantic>=2.5.0",
+    "python-dateutil>=2.8.2",
+]
+```
+
+---
+
+### Build Output Example
+
+After running `pypeline build`:
+
+```
+dist/
+└── snowflake/
+    └── customer_analytics-0.1.0.zip
+```
+
+**ZIP structure (verified by pypeline build):**
+
+```
+customer_analytics-0.1.0.zip
+├── pyproject.toml                      # ✅ At root - required by Snowflake
+├── customer_analytics/                 # ✅ Package at root - importable
+│   ├── __init__.py
+│   ├── pipelines/
+│   │   ├── __init__.py
+│   │   └── customer_segmentation/
+│   │       ├── __init__.py
+│   │       ├── customer_segmentation_runner.py
+│   │       ├── config.py
+│   │       └── processors/
+│   │           ├── __init__.py
+│   │           └── sales_enrichment_processor.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── etl.py
+│       ├── logger.py
+│       ├── tables.py
+│       ├── databases.py
+│       └── table_cache.py
+```
+
+**Snowflake deployment:**
+
+```sql
+-- Upload ZIP to Snowflake stage
+PUT file://dist/snowflake/customer_analytics-0.1.0.zip
+  @my_stage
+  AUTO_COMPRESS=FALSE;
+
+-- Create procedure using the pipeline
+CREATE OR REPLACE PROCEDURE run_customer_segmentation()
+RETURNS STRING
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.12'
+PACKAGES = ('snowflake-snowpark-python')
+IMPORTS = ('@my_stage/customer_analytics-0.1.0.zip')
+HANDLER = 'customer_analytics.pipelines.customer_segmentation.customer_segmentation_runner.CustomerSegmentationPipeline.run';
+
+-- Execute pipeline in Snowflake
+CALL run_customer_segmentation();
+```
 
 ---
 
@@ -907,94 +1482,149 @@ git push origin main --tags
 
 ### The Processor Pattern
 
-pypeline-cli follows a **Processor Pattern** for organizing ETL logic:
+pypeline-cli follows a **Processor Pattern** with centralized extraction for organizing ETL logic:
 
 ```
-Pipeline (Orchestrator)
+Pipeline.__init__()
     ↓
-Processor 1 (Extract + Transform)
+Extract: Pre-load input tables into TableCache
     ↓
-Processor 2 (Transform)
+Pipeline.run_processors()
     ↓
-Processor 3 (Transform)
+Processor 1(cache) → Transform
     ↓
-Pipeline (Load)
+Processor 2(cache) → Transform
+    ↓
+Processor 3(cache) → Transform
+    ↓
+Pipeline._write_to_snowflake() → Load
 ```
 
 **Key Principles:**
 
-1. **Extraction happens in `__init__()`**
-   - Processors extract data during instantiation
-   - Store raw data as instance attributes
-   - Use TableConfig for dynamic table names
+1. **Extraction happens at Pipeline level**
+   - Pipeline's `__init__()` pre-loads all input tables into TableCache
+   - TableCache uses TableConfig from `config.py` for dynamic table names
+   - Each table loaded **once**, eliminating redundant Snowflake queries
+   - Cache is shared across all processors
 
-2. **Transformation happens in `process()`**
-   - Main orchestrator method
-   - Calls private transformation methods
+2. **Transformation happens in Processor `process()`**
+   - Processors receive pre-populated cache in `__init__(cache)`
+   - Access cached tables via `self.cache.get_table("table_key")`
+   - `process()` method orchestrates transformations
+   - Private methods implement atomized transformation steps
    - Returns final DataFrame
 
 3. **Loading happens in Pipeline Runner**
-   - Pipeline orchestrates all processors
-   - Pipeline handles final write to Snowflake
+   - Pipeline orchestrates all processors with shared cache
+   - Pipeline handles final write to Snowflake via `_write_to_snowflake()`
    - Conditional writes based on `_write` flag
 
 ### Extract, Transform, Load (ETL) Stages
 
 #### **Stage 1: Extract**
 
-**Where:** Processor `__init__()` method
+**Where:** Pipeline `__init__()` method using TableCache
 
-**Purpose:** Read data from source(s) into DataFrames
+**Purpose:** Pre-load all input tables once and share across processors
 
 **Best Practices:**
-- Use `TableConfig` for dynamic table names
-- Store extracted DataFrames as instance attributes
-- Log table names and row counts
-- Handle missing tables gracefully
+- Define all TableConfigs in `config.py`
+- Pre-load tables in pipeline `__init__()` using `TableCache.preload_tables()`
+- Mark output tables with `is_output=True` to exclude from pre-loading
+- Log cache statistics for monitoring
+- Pass cache to all processors
 
 **Example:**
 
 ```python
-class OrdersExtractorProcessor:
+from ...utils.table_cache import TableCache
+from .config import TABLE_CONFIGS
+
+class OrderFulfillmentPipeline:
     def __init__(self, year: int, month: int):
         self.logger = Logger()
         self.etl = ETL()
+        self.year = year
+        self.month = month
 
-        # Configure table for monthly partition
-        ORDERS_TABLE.month = month
-        table_name = ORDERS_TABLE.generate_table_name(year=year)
-
-        self.logger.info(
-            message=f"Extracting orders from {table_name}",
-            context=MODULE_NAME
+        # Extract: Pre-load all input tables into cache (one-time operation)
+        self.cache = TableCache().preload_tables(
+            table_keys=[k for k, config in TABLE_CONFIGS.items() if not config.is_output],
+            table_configs=TABLE_CONFIGS
         )
 
-        # Extract: Read from Snowflake
-        self.orders_df = self.etl.session.table(table_name)
-
-        # Log extraction metrics
-        row_count = self.orders_df.count()
         self.logger.info(
-            message=f"Extracted {row_count} orders",
-            context=MODULE_NAME
+            message=f"Pre-loaded {len(self.cache.tables)} input tables into cache",
+            context="OrderFulfillmentPipeline.__init__"
         )
+
+    def run_processors(self):
+        # All processors receive the same pre-populated cache
+        orders_proc = OrdersProcessor(self.cache)
+        inventory_proc = InventoryProcessor(self.cache)
+
+        df = orders_proc.process()
+        df = inventory_proc.process(df)
+        return df
+```
+
+**config.py:**
+
+```python
+from ..utils.tables import TableConfig
+from ..utils.databases import Database, Schema
+
+TABLE_CONFIGS = {
+    "orders": TableConfig(
+        database=Database.RAW,
+        schema=Schema.LANDING,
+        table_name_template="orders_{MM}",
+        type="MONTHLY",
+        month=3,
+        is_output=False  # Input table - will be pre-loaded
+    ),
+    "customers": TableConfig(
+        database=Database.PROD,
+        schema=Schema.DIM,
+        table_name_template="dim_customers",
+        type="STABLE",
+        is_output=False  # Input table - will be pre-loaded
+    ),
+    "output": TableConfig(
+        database=Database.PROD,
+        schema=Schema.ANALYTICS,
+        table_name_template="order_summary",
+        type="STABLE",
+        is_output=True  # Output table - NOT pre-loaded
+    ),
+}
 ```
 
 **Architecture Diagram:**
 
 ```
-┌─────────────────────────────────────┐
-│  Processor.__init__()               │
-├─────────────────────────────────────┤
-│ 1. Get TableConfig                  │
-│ 2. Generate table name              │
-│ 3. Read from Snowflake              │
-│ 4. Store as instance attribute      │
-│ 5. Log extraction metrics           │
-└─────────────────────────────────────┘
+┌────────────────────────────────────────────┐
+│  Pipeline.__init__()                       │
+├────────────────────────────────────────────┤
+│ 1. Initialize Logger, ETL                  │
+│ 2. Initialize TableCache                   │
+│ 3. Call preload_tables() with configs      │
+│    - Reads TABLE_CONFIGS from config.py    │
+│    - Generates table names dynamically     │
+│    - Loads each input table from Snowflake │
+│    - Stores in cache.tables dict           │
+│ 4. Log cache statistics                    │
+└────────────────────────────────────────────┘
          │
          ▼
-   self.orders_df (DataFrame)
+   self.cache.tables = {
+       "orders": DataFrame,
+       "customers": DataFrame
+   }
+         │
+         ▼
+   Pass to all processors
 ```
 
 #### **Stage 2: Transform**
@@ -1013,8 +1643,23 @@ class OrdersExtractorProcessor:
 **Example:**
 
 ```python
-class OrdersExtractorProcessor:
-    # ... __init__ above ...
+from ....utils.decorators import time_function
+from ....utils.logger import Logger
+
+class OrdersTransformProcessor:
+    def __init__(self, cache):
+        """
+        Receive pre-populated cache from pipeline.
+
+        Args:
+            cache: TableCache with pre-loaded input tables
+        """
+        self.logger = Logger()
+        self.cache = cache
+
+        # Access pre-loaded tables from cache (no Snowflake query)
+        self.orders_df = cache.get_table("orders")
+        self.customers_df = cache.get_table("customers")
 
     @time_function(f"{MODULE_NAME}.process")
     def process(self) -> DataFrame:
@@ -1068,15 +1713,13 @@ class OrdersExtractorProcessor:
 
     def _enrich_customer_tier(self, df: DataFrame) -> DataFrame:
         """
-        Join customer tier from CUSTOMER_DIM table.
+        Join customer tier from pre-loaded customers table.
 
         Adds CUSTOMER_TIER column based on lifetime value.
         """
-        customer_dim_table = CUSTOMER_DIM.generate_table_name()
-        customer_df = self.etl.session.table(customer_dim_table)
-
+        # Use pre-loaded customer data from cache (no additional query)
         return df.join(
-            customer_df.select("CUSTOMER_ID", "CUSTOMER_TIER"),
+            self.customers_df.select("CUSTOMER_ID", "CUSTOMER_TIER"),
             on="CUSTOMER_ID",
             how="left"
         )
@@ -1098,6 +1741,16 @@ class OrdersExtractorProcessor:
 
 ```
 ┌────────────────────────────────────────┐
+│  Processor.__init__(cache)             │
+├────────────────────────────────────────┤
+│  1. Store cache reference              │
+│  2. Access pre-loaded tables:          │
+│     - orders_df = cache.get_table()    │
+│     - customers_df = cache.get_table() │
+└────────────────────────────────────────┘
+              │
+              ▼
+┌────────────────────────────────────────┐
 │  Processor.process()                   │
 ├────────────────────────────────────────┤
 │  1. _filter_completed_orders()         │
@@ -1107,7 +1760,7 @@ class OrdersExtractorProcessor:
 │       │                                 │
 │       ▼                                 │
 │  3. _enrich_customer_tier(df)          │
-│       │                                 │
+│       │  (uses cached customers_df)    │
 │       ▼                                 │
 │  4. _aggregate_daily_summary(df)       │
 │       │                                 │
@@ -1283,60 +1936,70 @@ class OrderFulfillmentPipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PIPELINE ORCHESTRATOR                        │
-│                                                                 │
-│  run(_write: bool)                                              │
-│    │                                                             │
-│    ▼                                                             │
-│  pipeline(_write)                                               │
-│    │                                                             │
-│    ▼                                                             │
-│  run_processors()                                               │
-└─────────────┬───────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    PROCESSOR 1: EXTRACT                         │
+│               PIPELINE ORCHESTRATOR                             │
 │                                                                 │
 │  __init__():                                                    │
-│    - Get TableConfig                                            │
-│    - Generate table name                                        │
-│    - Read from Snowflake                                        │
-│    - Store as self.df                                           │
+│    ├─ Initialize Logger, ETL                                    │
+│    └─ EXTRACT: Pre-load tables into TableCache                 │
+│         - Read TABLE_CONFIGS from config.py                    │
+│         - Load each input table (is_output=False)              │
+│         - Store in self.cache.tables dict                      │
+│                                                                 │
+│  run(_write: bool):                                             │
+│    └─ Call pipeline(_write)                                    │
+│                                                                 │
+│  pipeline(_write):                                              │
+│    ├─ Call run_processors()                                    │
+│    └─ Conditionally write results                              │
+│                                                                 │
+│  run_processors():                                              │
+└─────────────┬───────────────────────────────────────────────────┘
+              │
+              ▼ (pass self.cache to each processor)
+┌─────────────────────────────────────────────────────────────────┐
+│                PROCESSOR 1: TRANSFORM                           │
+│                                                                 │
+│  __init__(cache):                                               │
+│    - Store cache reference                                      │
+│    - Access pre-loaded tables:                                  │
+│      • self.orders_df = cache.get_table("orders")              │
+│      • self.customers_df = cache.get_table("customers")        │
 │                                                                 │
 │  process():                                                     │
 │    - _filter_valid_rows()                                       │
+│    - _join_with_customers() [uses cached customers_df]         │
 │    - _calculate_metrics()                                       │
 │    - return df                                                  │
 └─────────────┬───────────────────────────────────────────────────┘
               │
-              ▼
+              ▼ (pass cache and/or df)
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PROCESSOR 2: TRANSFORM                       │
+│                PROCESSOR 2: TRANSFORM                           │
 │                                                                 │
-│  __init__(df):                                                  │
-│    - Store input df                                             │
+│  __init__(cache):                                               │
+│    - Store cache reference                                      │
+│    - Access any additional cached tables if needed              │
 │                                                                 │
-│  process():                                                     │
-│    - _enrich_with_lookup()                                      │
+│  process(df):                                                   │
+│    - _enrich_with_lookup() [may use cache.get_table()]         │
 │    - _apply_business_rules()                                    │
 │    - return df                                                  │
 └─────────────┬───────────────────────────────────────────────────┘
               │
-              ▼
+              ▼ (pass cache and/or df)
 ┌─────────────────────────────────────────────────────────────────┐
-│                    PROCESSOR 3: AGGREGATE                       │
+│                PROCESSOR 3: TRANSFORM                           │
 │                                                                 │
-│  __init__(df):                                                  │
-│    - Store input df                                             │
+│  __init__(cache):                                               │
+│    - Store cache reference                                      │
 │                                                                 │
-│  process():                                                     │
+│  process(df):                                                   │
 │    - _group_by_dimensions()                                     │
 │    - _calculate_aggregates()                                    │
 │    - return final_df                                            │
 └─────────────┬───────────────────────────────────────────────────┘
               │
-              ▼
+              ▼ (return final_df to pipeline)
 ┌─────────────────────────────────────────────────────────────────┐
 │                    PIPELINE: LOAD                               │
 │                                                                 │
@@ -1345,16 +2008,28 @@ class OrderFulfillmentPipeline:
 │      │                                                           │
 │      ▼                                                           │
 │    df.write.mode("overwrite").save_as_table("DB.SCHEMA.TABLE") │
+│    Log success                                                  │
+│  else:                                                          │
+│    Log dry-run completion                                       │
 │                                                                 │
-│  Log completion                                                 │
+│  Log pipeline completion                                        │
 └─────────────────────────────────────────────────────────────────┘
+
+Key: Extract happens ONCE at pipeline.__init__() via TableCache
+     All processors receive shared cache and focus on Transform only
+     Load happens at pipeline level via _write_to_snowflake()
 ```
 
 ---
 
 ## Built-in Utilities
 
-pypeline-cli provides several utility modules out-of-the-box. These are auto-generated in `{project}/utils/`.
+pypeline-cli provides a comprehensive set of utility modules out-of-the-box. These are auto-generated in `{project}/utils/` during project initialization. Utilities fall into two categories:
+
+- **⚙️ Framework Files** - Auto-generated, optimized utilities (marked "DO NOT MODIFY")
+- **✏️ User-Editable Files** - Configuration files meant to be customized for your project
+
+---
 
 ### ETL Singleton
 
@@ -1610,6 +2285,259 @@ table_name = f"{Database.PROD}.{Schema.ANALYTICS}.customer_segments"
 - Define all database and schema names here
 - Use class constants instead of string literals
 - Reference in TableConfig definitions
+
+---
+
+### TableCache
+
+**File:** `utils/table_cache.py` (⚙️ Framework - Do Not Modify)
+
+**Purpose:** Pre-loads and caches input tables to eliminate redundant Snowflake queries across processors.
+
+**The Problem It Solves:**
+
+Without TableCache, if multiple processors need the same input table, each processor would query Snowflake separately:
+
+```python
+# ❌ Without TableCache - Multiple redundant queries
+class Processor1:
+    def __init__(self):
+        self.customer_df = etl.session.table("DB.SCHEMA.customers")  # Query 1
+
+class Processor2:
+    def __init__(self):
+        self.customer_df = etl.session.table("DB.SCHEMA.customers")  # Query 2 (redundant!)
+```
+
+**With TableCache:**
+
+```python
+# ✅ With TableCache - Single query, shared across processors
+class Pipeline:
+    def __init__(self):
+        self.cache = TableCache()
+        # Pre-load all input tables once
+        self.cache.add_table("customers", "DB.SCHEMA.customers")
+        self.cache.add_table("orders", "DB.SCHEMA.orders")
+
+    def run_processors(self):
+        # All processors receive same cache instance
+        processor1 = Processor1(self.cache)  # Uses cached customer_df
+        processor2 = Processor2(self.cache)  # Reuses same customer_df
+```
+
+**Complete Example:**
+
+```python
+from ...utils.table_cache import TableCache
+from ...utils.etl import ETL
+
+class CustomerSegmentationPipeline:
+    def __init__(self, month: int):
+        self.logger = Logger()
+        self.etl = ETL()
+        self.month = month
+
+        # Initialize cache
+        self.cache = TableCache()
+
+        # Pre-load all input tables
+        self.cache.add_table("customers", "PROD.DIM.customers")
+        self.cache.add_table("orders", f"PROD.FACT.orders_{month:02d}")
+        self.cache.add_table("products", "PROD.DIM.products")
+
+        self.logger.info(
+            message=f"Pre-loaded {len(self.cache.tables)} tables into cache",
+            context="CustomerSegmentationPipeline"
+        )
+
+    def run_processors(self):
+        # Processors access pre-loaded tables from cache
+        sales = SalesProcessor(self.cache)
+        enrichment = EnrichmentProcessor(self.cache)
+        segmentation = SegmentationProcessor(self.cache)
+
+        df = sales.process()
+        df = enrichment.process(df)
+        df = segmentation.process(df)
+        return df
+
+
+class SalesProcessor:
+    def __init__(self, cache: TableCache):
+        self.cache = cache
+        # Access pre-loaded table (no Snowflake query)
+        self.orders_df = cache.get_table("orders")
+        self.products_df = cache.get_table("products")
+
+    def process(self) -> DataFrame:
+        # Join using cached tables
+        return self.orders_df.join(
+            self.products_df,
+            on="PRODUCT_ID",
+            how="left"
+        )
+```
+
+**Key Methods:**
+
+- `add_table(name: str, table_path: str)` - Load and cache a table
+- `get_table(name: str) -> DataFrame` - Retrieve cached table
+- `tables` property - Dict of all cached tables
+
+**Benefits:**
+- **Performance**: Each table queried only once per pipeline run
+- **Cost**: Reduces Snowflake compute credits
+- **Simplicity**: Processors don't manage their own table loading
+- **Consistency**: All processors work with identical data snapshots
+
+**Best Practices:**
+- Pre-load all input tables in pipeline `__init__()`
+- Pass cache instance to all processors
+- Use descriptive cache keys (e.g., "customers", "orders", "products")
+- Log cache statistics for monitoring
+
+---
+
+### Columns Utilities
+
+**File:** `utils/columns.py` (✏️ User Editable)
+
+**Purpose:** Generate dynamic column names and manage column configurations for time-partitioned data.
+
+**MonthlyColumnConfig:**
+
+Useful for generating month-specific column names in wide-format tables.
+
+**Example:**
+
+```python
+from ...utils.columns import MonthlyColumnConfig
+
+# Define column configuration
+REVENUE_COLUMNS = MonthlyColumnConfig(
+    prefix="REVENUE",
+    suffix="USD",
+    separator="_"
+)
+
+# Generate column name for January
+jan_col = REVENUE_COLUMNS.generate_column_name(month=1)
+# Result: "REVENUE_01_USD"
+
+# Generate column name for December
+dec_col = REVENUE_COLUMNS.generate_column_name(month=12)
+# Result: "REVENUE_12_USD"
+
+# Use in DataFrame operations
+df = df.with_column(
+    REVENUE_COLUMNS.generate_column_name(month=3),
+    col("MARCH_SALES") * col("PRICE")
+)
+```
+
+**Use Cases:**
+- Wide-format tables with monthly columns
+- Pivot tables with time-based dimensions
+- Budgeting and forecasting tables
+- Year-over-year comparison tables
+
+---
+
+### Date Parser
+
+**File:** `utils/date_parser.py` (⚙️ Framework - Do Not Modify)
+
+**Purpose:** Provides utilities for parsing, formatting, and manipulating dates in Snowflake pipelines.
+
+**Common Functions:**
+
+```python
+from ...utils.date_parser import (
+    parse_date,
+    get_month_start,
+    get_month_end,
+    format_table_date
+)
+
+# Parse various date formats
+date = parse_date("2025-03-15")
+date = parse_date("03/15/2025")
+
+# Get month boundaries
+month_start = get_month_start(year=2025, month=3)  # 2025-03-01
+month_end = get_month_end(year=2025, month=3)      # 2025-03-31
+
+# Format dates for table names
+table_suffix = format_table_date(year=2025, month=3)  # "2025_03"
+```
+
+**Best Practices:**
+- Use for consistent date handling across pipelines
+- Standardize date formats for table naming
+- Handle month boundaries in time-partitioned data
+
+---
+
+### Snowflake Utilities
+
+**File:** `utils/snowflake_utils.py` (⚙️ Framework - Do Not Modify)
+
+**Purpose:** Provides Snowflake-specific helper functions for common operations.
+
+**Common Operations:**
+
+```python
+from ...utils.snowflake_utils import (
+    table_exists,
+    get_table_schema,
+    execute_sql,
+    grant_privileges
+)
+
+# Check if table exists
+if table_exists("PROD.ANALYTICS.customer_segments"):
+    logger.info("Table found")
+
+# Get table schema
+schema = get_table_schema("PROD.DIM.customers")
+
+# Execute arbitrary SQL
+execute_sql("GRANT SELECT ON TABLE customers TO ROLE analyst")
+
+# Grant privileges
+grant_privileges(
+    table="PROD.ANALYTICS.revenue_summary",
+    role="REPORTING_ROLE",
+    privileges=["SELECT"]
+)
+```
+
+**Use Cases:**
+- Table existence checks before operations
+- Schema validation and comparison
+- Access control management
+- Administrative operations
+
+---
+
+### Framework Files Summary
+
+| Utility | File | Purpose | Modifiable |
+|---------|------|---------|------------|
+| **ETL Singleton** | `etl.py` | Snowpark session management | ⚙️ No |
+| **Logger** | `logger.py` | Structured, color-coded logging | ⚙️ No |
+| **Decorators** | `decorators.py` | Timing, table checks, freshness validation | ⚙️ No |
+| **TableCache** | `table_cache.py` | Pre-load and cache input tables | ⚙️ No |
+| **Date Parser** | `date_parser.py` | Date parsing and formatting utilities | ⚙️ No |
+| **Snowflake Utils** | `snowflake_utils.py` | Snowflake-specific helper functions | ⚙️ No |
+| **TableConfig** | `tables.py` | Dynamic table naming with time partitioning | ✏️ Yes |
+| **Databases** | `databases.py` | Database and schema constants | ✏️ Yes |
+| **Columns** | `columns.py` | Column generation utilities | ✏️ Yes |
+
+**Key Principle:**
+
+Framework files (⚙️) are optimized, tested utilities that handle infrastructure concerns. User-editable files (✏️) are meant for you to customize with your project-specific configurations. This separation ensures framework stability while providing flexibility for your business logic.
 
 ---
 

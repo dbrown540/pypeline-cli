@@ -1,3 +1,67 @@
+"""
+Snowflake Utility Functions
+
+✅ SAFE TO MODIFY - Customize as needed for your pipeline
+
+This file provides utility functions for common Snowflake operations including
+table existence checks, modification timestamps, and table metadata queries.
+
+Purpose:
+    Provides helper functions for interacting with Snowflake tables and metadata.
+    These utilities reduce boilerplate code and provide consistent patterns for
+    common operations like checking table freshness and existence.
+
+Usage:
+    from pipelines.utils.snowflake_utils import (
+        table_modified_this_month,
+        get_table_last_modified,
+        check_table_exists
+    )
+    from pipelines.utils.etl import ETL
+    from pipelines.utils.tables import MY_TABLE_CONFIG
+
+    etl = ETL()
+
+    # Check if table was modified this month
+    is_fresh = table_modified_this_month(
+        session=etl.session,
+        table_name="users",
+        schema_name="staging",
+        database_name="analytics"
+    )
+
+    # Get last modified timestamp
+    result = get_table_last_modified(
+        session=etl.session,
+        database_name="analytics",
+        schema_name="staging",
+        table_name="users"
+    )
+    print(result["dt"])   # datetime object
+    print(result["iso"])  # ISO string
+
+    # Check table existence using TableConfig
+    exists = check_table_exists(
+        session=etl.session,
+        config=MY_TABLE_CONFIG,
+        year=2025,
+        database_name=None,
+        schema_name=None,
+        table_name=None
+    )
+
+Design Pattern:
+    - Metadata Queries: Leverages Snowflake INFORMATION_SCHEMA and SYSTEM functions
+    - Timezone Handling: Converts timestamps to Eastern timezone for display
+    - Flexible Parameters: Accepts either explicit names or TableConfig objects
+    - Type Safety: Uses TypedDict for structured return values
+
+Customization:
+    Feel free to add your own Snowflake utility functions to this file. Common
+    additions include custom metadata queries, data quality checks, or table
+    management operations.
+"""
+
 from datetime import datetime
 from typing import cast, Tuple, TypedDict
 from zoneinfo import ZoneInfo
@@ -5,7 +69,15 @@ from zoneinfo import ZoneInfo
 from snowflake.snowpark import Session
 from .tables import TableConfig
 
+
 class TimestampResult(TypedDict):
+    """
+    Structured result for table timestamp queries.
+
+    Attributes:
+        dt (datetime): Timezone-aware datetime in Eastern timezone
+        iso (str): ISO 8601 formatted string of the datetime
+    """
     dt: datetime
     iso: str
 
@@ -16,7 +88,38 @@ def table_modified_this_month(
     database_name: str
 ) -> bool:
     """
-    Let Snowflake handle the timestamp conversion
+    Check if a Snowflake table was modified in the current month.
+
+    Uses Snowflake's SYSTEM$LAST_CHANGE_COMMIT_TIME to get the last change
+    timestamp and compares it to the current month.
+
+    Args:
+        session (Session): Active Snowflake Snowpark session
+        table_name (str): Name of the table to check
+        schema_name (str): Schema containing the table
+        database_name (str): Database containing the schema
+
+    Returns:
+        bool: True if the table was modified in the current month, False otherwise
+
+    Examples:
+        >>> from pipelines.utils.etl import ETL
+        >>> from pipelines.utils.snowflake_utils import table_modified_this_month
+        >>>
+        >>> etl = ETL()
+        >>> is_fresh = table_modified_this_month(
+        ...     session=etl.session,
+        ...     table_name="users_2025",
+        ...     schema_name="staging",
+        ...     database_name="analytics"
+        ... )
+        Last change: 2025-03-15 14:30:00
+        Modified in current month: True
+        >>> print(is_fresh)
+        True
+
+    Note:
+        This function prints diagnostic information to stdout.
     """
     query = f"""
     SELECT 
@@ -41,6 +144,40 @@ def get_table_last_modified(
     schema_name: str,
     table_name: str
 ) -> TimestampResult:
+    """
+    Get the last modified timestamp of a Snowflake table.
+
+    Queries the INFORMATION_SCHEMA.TABLES view to retrieve the LAST_ALTERED
+    timestamp and converts it to Eastern timezone for display.
+
+    Args:
+        session (Session): Active Snowflake Snowpark session
+        database_name (str): Database containing the schema
+        schema_name (str): Schema containing the table
+        table_name (str): Name of the table to check
+
+    Returns:
+        TimestampResult: Dictionary with 'dt' (datetime) and 'iso' (str) keys
+
+    Examples:
+        >>> from pipelines.utils.etl import ETL
+        >>> from pipelines.utils.snowflake_utils import get_table_last_modified
+        >>>
+        >>> etl = ETL()
+        >>> result = get_table_last_modified(
+        ...     session=etl.session,
+        ...     database_name="analytics",
+        ...     schema_name="staging",
+        ...     table_name="users"
+        ... )
+        >>> print(result["dt"])
+        2025-03-15 14:30:00-05:00
+        >>> print(result["iso"])
+        2025-03-15T14:30:00-05:00
+
+    Note:
+        The datetime is converted to America/New_York timezone.
+    """
 
     query = f"""
         SELECT LAST_ALTERED
@@ -71,6 +208,73 @@ def check_table_exists(
     schema_name: str | None,
     table_name: str | None,
 ) -> bool:
+    """
+    Check if a table exists in Snowflake using either explicit names or TableConfig.
+
+    Provides flexible table existence checking with support for both explicit
+    database/schema/table names and TableConfig objects for dynamic table names.
+
+    Args:
+        session (Session): Active Snowflake Snowpark session
+        config (TableConfig | None): TableConfig object for dynamic table names
+        year (int | None): Year for YEARLY table types (used with config)
+        database_name (str | None): Explicit database name
+        schema_name (str | None): Explicit schema name
+        table_name (str | None): Explicit table name
+
+    Returns:
+        bool: True if table exists, False otherwise
+
+    Raises:
+        ValueError: If neither (database, schema, table) nor config is provided
+
+    Examples:
+        >>> from pipelines.utils.etl import ETL
+        >>> from pipelines.utils.snowflake_utils import check_table_exists
+        >>> from pipelines.utils.tables import MY_YEARLY_TABLE
+        >>>
+        >>> etl = ETL()
+        >>>
+        >>> # Using explicit names
+        >>> exists = check_table_exists(
+        ...     session=etl.session,
+        ...     config=None,
+        ...     year=None,
+        ...     database_name="analytics",
+        ...     schema_name="staging",
+        ...     table_name="users"
+        ... )
+        >>> print(exists)
+        True
+        >>>
+        >>> # Using TableConfig for YEARLY table
+        >>> exists = check_table_exists(
+        ...     session=etl.session,
+        ...     config=MY_YEARLY_TABLE,
+        ...     year=2025,
+        ...     database_name=None,
+        ...     schema_name=None,
+        ...     table_name=None
+        ... )
+        >>> print(exists)
+        False
+        >>>
+        >>> # Using TableConfig for STABLE table
+        >>> exists = check_table_exists(
+        ...     session=etl.session,
+        ...     config=MY_STABLE_TABLE,
+        ...     year=None,
+        ...     database_name=None,
+        ...     schema_name=None,
+        ...     table_name=None
+        ... )
+        >>> print(exists)
+        True
+
+    Note:
+        You must provide either (database_name, schema_name, table_name) OR config.
+        For YEARLY tables, year is required when using config.
+    """
     if database_name and schema_name and table_name:
         return session.catalog.table_exists(
             table_name, 
