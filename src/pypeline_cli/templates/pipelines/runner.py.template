@@ -57,7 +57,10 @@ class $class_name:
         """
         self.logger = Logger()
         self.etl = ETL()
-        self.cache: Dict[str, DataFrame] = TableCache()
+        self.cache = TableCache().preload_tables(
+            [k for k, config in TABLE_CONFIGS.items() if not config.is_output],
+            TABLE_CONFIGS
+        )
 
     @time_function("$class_name.run")
     def run(self, _write: bool = False):
