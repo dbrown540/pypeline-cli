@@ -77,7 +77,7 @@ class $class_name:
             return df
         """
         self.logger.info(
-            message=f"Starting $class_name processing",
+            message="Starting $class_name processing",
             context=MODULE_NAME
         )
 

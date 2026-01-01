@@ -7,12 +7,12 @@ This module imports from the project's utility modules (databases.py, tables.py,
 to help you define pipeline-specific table configurations and constants.
 """
 
-from typing import Dict, Final
-
 # Import project utilities - customize as needed
-from ...utils.databases import Database, Schema
-from ...utils.tables import TableConfig
-from ...utils.columns import MonthlyColumnConfig
+# from ...utils.databases import Database as D, Schema as S
+# from ...utils.types import (
+#     TableConfig, 
+#     MonthlyColumnConfig
+# )
 
 # TODO: Add pipeline-specific configuration
 # Examples:
@@ -24,15 +24,15 @@ from ...utils.columns import MonthlyColumnConfig
 # Example table configurations using Dict[str, TableConfig]:
 # TABLE_CONFIGS: Dict[str, TableConfig] = {
 #     "source": TableConfig(
-#         database=Database.PRODUCTION,
-#         schema=Schema.RAW,
+#         database=D.PRODUCTION,
+#         schema=S.RAW,
 #         table_name_template="source_data_{YYYY}",
 #         type="YEARLY",
 #         is_output=False
 #     ),
 #     "destination": TableConfig(
-#         database=Database.ANALYTICS,
-#         schema=Schema.PROCESSED,
+#         database=D.ANALYTICS,
+#         schema=S.PROCESSED,
 #         table_name_template="$pipeline_name_output",
 #         type="STABLE"
 #         is_output=True

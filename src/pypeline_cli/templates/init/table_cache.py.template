@@ -56,7 +56,7 @@ from snowflake.snowpark import DataFrame
 
 from .etl import ETL
 from .logger import Logger
-from .tables import TableConfig
+from .types import TableConfig
 
 MODULE_NAME: Final[str] = "utils/table_cache.py"
 

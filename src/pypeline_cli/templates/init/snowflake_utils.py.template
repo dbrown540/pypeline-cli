@@ -67,19 +67,11 @@ from typing import cast, Tuple, TypedDict
 from zoneinfo import ZoneInfo
 
 from snowflake.snowpark import Session
-from .tables import TableConfig
+from .types import (
+    TableConfig, 
+    TimestampResult
+)
 
-
-class TimestampResult(TypedDict):
-    """
-    Structured result for table timestamp queries.
-
-    Attributes:
-        dt (datetime): Timezone-aware datetime in Eastern timezone
-        iso (str): ISO 8601 formatted string of the datetime
-    """
-    dt: datetime
-    iso: str
 
 def table_modified_this_month(
     session: Session,

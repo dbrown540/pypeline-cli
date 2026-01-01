@@ -64,6 +64,7 @@ def validate_project_name(name: str) -> tuple[bool, str]:
         "LPT7",
         "LPT8",
         "LPT9",
+        "TESTS"
     }
     if name.upper() in reserved_names:
         return False, f"'{name}' is a reserved name on Windows"

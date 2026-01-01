@@ -75,10 +75,6 @@ class ProjectContext:
         return self.import_folder / "utils"
 
     @property
-    def columns_file(self) -> Path:
-        return self.project_utils_folder_path / "columns.py"
-
-    @property
     def databases_file(self) -> Path:
         return self.project_utils_folder_path / "databases.py"
 
@@ -103,10 +99,6 @@ class ProjectContext:
         return self.project_utils_folder_path / "snowflake_utils.py"
 
     @property
-    def tables_file(self) -> Path:
-        return self.project_utils_folder_path / "tables.py"
-
-    @property
     def basic_test_file(self) -> Path:
         return self.integration_tests_folder_path / "basic_test.py"
 
@@ -125,3 +117,7 @@ class ProjectContext:
     @property
     def table_cache_file(self) -> Path:
         return self.project_utils_folder_path / "table_cache.py"
+
+    @property
+    def types_file(self) -> Path:
+        return self.project_utils_folder_path / "types.py"

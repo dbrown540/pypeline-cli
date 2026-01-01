@@ -46,20 +46,12 @@ class ScaffoldFile:
 
 INIT_SCAFFOLD_FILES = [
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "columns.py.template",
-        destination_property="columns_file",
-    ),
-    ScaffoldFile(
         template_name=PATH_TO_INIT_TEMPLATES / "databases.py.template",
         destination_property="databases_file",
     ),
     ScaffoldFile(
         template_name=PATH_TO_INIT_TEMPLATES / "date_parser.py.template",
         destination_property="date_parser_file",
-    ),
-    ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "tables.py.template",
-        destination_property="tables_file",
     ),
     ScaffoldFile(
         template_name=PATH_TO_INIT_TEMPLATES / "etl.py.template",
@@ -97,4 +89,8 @@ INIT_SCAFFOLD_FILES = [
         template_name=PATH_TO_INIT_TEMPLATES / "table_cache.py.template",
         destination_property="table_cache_file",
     ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / "types.py.template",
+        destination_property="types_file"
+    )
 ]
