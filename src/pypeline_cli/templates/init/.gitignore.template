@@ -150,6 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
+credentials.py          # Snowflake credentials (local development only)
 .venv
 env/
 venv/

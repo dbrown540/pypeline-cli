@@ -68,6 +68,11 @@ def build():
     click.echo(f"\n📦 Creating Snowflake ZIP: {zip_filename}")
     click.echo(f"   Package '{package_name}' will be at root level\n")
 
+    # Security check: Warn if credentials file exists
+    credentials_path = ctx.project_root / "credentials.py"
+    if credentials_path.exists():
+        click.echo("⚠️  Found credentials.py - will be excluded from build")
+
     # Files and directories to exclude
     exclude_patterns = {
         "__pycache__",
@@ -77,6 +82,10 @@ def build():
         "*.pyo",
         "*.pyd",
         ".DS_Store",
+        "credentials.py",     # Snowflake credentials
+        "credentials.pyc",    # Compiled credentials
+        ".env",               # Environment files
+        ".envrc",             # direnv files
     }
 
     def should_exclude(path: Path) -> bool:

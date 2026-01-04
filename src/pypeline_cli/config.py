@@ -92,5 +92,9 @@ INIT_SCAFFOLD_FILES = [
     ScaffoldFile(
         template_name=PATH_TO_INIT_TEMPLATES / "types.py.template",
         destination_property="types_file"
+    ),
+    ScaffoldFile(
+        template_name=PATH_TO_INIT_TEMPLATES / "credentials.py.example.template",
+        destination_property="credentials_example_file",
     )
 ]

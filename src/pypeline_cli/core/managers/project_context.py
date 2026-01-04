@@ -121,3 +121,11 @@ class ProjectContext:
     @property
     def types_file(self) -> Path:
         return self.project_utils_folder_path / "types.py"
+
+    @property
+    def credentials_file(self) -> Path:
+        return self.project_root / "credentials.py"
+
+    @property
+    def credentials_example_file(self) -> Path:
+        return self.project_root / "credentials.py.example"
