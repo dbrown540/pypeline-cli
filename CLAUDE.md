@@ -130,7 +130,7 @@ The `build` command flow:
 ### Template System
 
 Templates are stored in `src/pypeline_cli/templates/`:
-- `init/` - Project scaffolding templates (databases.py, etl.py, tables.py, logger.py, decorators.py, etc.)
+- `init/` - Project scaffolding templates (databases.py, etl.py, logger.py, decorators.py, table_cache.py, types.py, snowflake_utils.py, date_parser.py, etc.)
 - `licenses/` - 14 different license templates with variable substitution
 - `pipelines/` - Pipeline templates with variable substitution:
   - `runner.py.template` - Pipeline orchestrator with run(), pipeline(), run_processors(), _write_to_snowflake()
@@ -246,14 +246,14 @@ my_project/                      # Project root
 │   │       └── tests/
 │   ├── schemas/                # Database schemas (user-created)
 │   └── utils/                  # Framework utilities
-│       ├── columns.py
 │       ├── databases.py
 │       ├── date_parser.py
 │       ├── decorators.py
 │       ├── etl.py             # ETL singleton
 │       ├── logger.py          # Logger singleton
 │       ├── snowflake_utils.py
-│       └── tables.py          # TableConfig classes
+│       ├── table_cache.py     # TableCache for pre-loading
+│       └── types.py           # Shared types, enums, dataclasses
 └── tests/                      # Integration tests
     └── basic_test.py
 ```
@@ -395,6 +395,223 @@ Handled by `utils/name_converter.py`:
   - Transform happens in processor `process()` method
   - Load happens in pipeline `_write_to_snowflake()` method
 - **Framework vs User Code**:
-  - Framework files (etl.py, logger.py, decorators.py) marked "DO NOT MODIFY"
-  - User-editable files (databases.py, tables.py, dependencies.py) clearly documented
+  - Framework files (etl.py, logger.py, decorators.py, table_cache.py, snowflake_utils.py, types.py) marked "DO NOT MODIFY"
+  - User-editable files (databases.py, dependencies.py) clearly documented
   - Generated scaffolding (runners, processors) includes TODO comments for implementation
+
+## Key Utility Functions
+
+### types.py - Shared Types and Dataclasses
+
+**File:** `utils/types.py` (⚙️ Framework - Do Not Modify)
+
+**Purpose:** Centralized location for all shared types, enums, and dataclasses used across the framework.
+
+**Key Components:**
+
+#### `LogLevel` Enum
+Defines log levels with color coding for terminal output:
+- `DEBUG` (10): Gray - Detailed diagnostic information
+- `INFO` (20): Green - General informational messages
+- `WARN` (30): Yellow - Warning messages
+- `ERROR` (40): Red - Error messages
+- `CRITICAL` (50): Magenta - Critical failures
+
+#### `TableConfig` Dataclass
+Configuration for dynamic table naming with temporal partitioning:
+
+```python
+from ...utils.types import TableConfig
+
+# Yearly table
+config = TableConfig(
+    database="ANALYTICS",
+    schema="RAW",
+    table_name_template="sales_{YYYY}",
+    type="YEARLY",
+    is_output=False
+)
+config.generate_table_name(year=2025)  # "ANALYTICS.RAW.sales_2025"
+
+# Monthly table
+config = TableConfig(
+    database="PROD",
+    schema="STAGING",
+    table_name_template="events_{MM}",
+    type="MONTHLY",
+    month=3,
+    is_output=False
+)
+config.generate_table_name()  # "PROD.STAGING.events_03"
+
+# Stable table
+config = TableConfig(
+    database="ANALYTICS",
+    schema="REPORTING",
+    table_name_template="dim_products",
+    type="STABLE",
+    is_output=True  # Marks as output table (not pre-loaded into cache)
+)
+config.generate_table_name()  # "ANALYTICS.REPORTING.dim_products"
+```
+
+**Methods:**
+- `generate_table_name(year: Optional[int] = None) -> str`: Returns fully qualified table name
+- `generate_parsed_table_path(year: Optional[int] = None) -> Dict`: Returns dict with `database`, `schema`, `table` keys
+
+**Template Placeholders:**
+- `{YYYY}` - 4-digit year (e.g., 2025)
+- `{YY}` - 2-digit year (e.g., 25)
+- `{MM}` - 2-digit month with leading zero (e.g., 01, 12)
+
+#### `ParsedTablePath` Dataclass
+Represents a decomposed table path with database, schema, and table components:
+
+```python
+@dataclass
+class ParsedTablePath:
+    database: str
+    schema: str
+    table: str
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.database}.{self.schema}.{self.table}"
+```
+
+#### `TimestampResult` TypedDict
+Return type for timestamp queries:
+- `dt`: timezone-aware datetime object
+- `iso`: ISO 8601 formatted string
+
+#### `ParsedDateTime` TypedDict
+Validated datetime with UTC normalization for date parsing utilities.
+
+### snowflake_utils.py - Snowflake Helper Functions
+
+**File:** `utils/snowflake_utils.py` (⚙️ Framework - Do Not Modify)
+
+**Purpose:** Provides Snowflake-specific helper functions that integrate with TableConfig for common operations.
+
+**Key Functions:**
+
+#### `get_table_last_modified()`
+
+Get the last modified timestamp for a table in Eastern timezone.
+
+```python
+from ...utils.snowflake_utils import get_table_last_modified
+from ...utils.etl import ETL
+
+etl = ETL()
+
+# Using TableConfig (preferred)
+result = get_table_last_modified(
+    etl.session,
+    config=SALES_TABLE,
+    year=2025
+)
+print(result["iso"])  # '2025-01-15T14:30:00-05:00'
+print(result["dt"])   # datetime object in America/New_York
+
+# Using explicit path
+result = get_table_last_modified(
+    etl.session,
+    database_name="ANALYTICS",
+    schema_name="RAW",
+    table_name="sales_2025"
+)
+```
+
+**Parameters:**
+- `session`: Active Snowpark Session
+- `config`: Optional TableConfig (preferred)
+- `year`: Optional year for TableConfig resolution
+- `database_name`, `schema_name`, `table_name`: Alternative explicit path
+
+**Returns:** `TimestampResult` dict with `dt` (datetime) and `iso` (string) keys
+
+#### `check_table_exists()`
+
+Check if a table exists in Snowflake. Returns False on permission errors.
+
+```python
+from ...utils.snowflake_utils import check_table_exists
+
+# Using TableConfig
+exists = check_table_exists(etl.session, config=SALES_TABLE, year=2025)
+
+# Using explicit path
+exists = check_table_exists(
+    etl.session,
+    database_name="PROD",
+    schema_name="ANALYTICS",
+    table_name="customer_segments"
+)
+
+if exists:
+    logger.info("Table found")
+```
+
+**Returns:** `True` if table exists, `False` otherwise (including on permission errors)
+
+#### `check_table_read_access()`
+
+Verify read permissions by attempting a minimal read operation (SELECT 1 LIMIT 1).
+
+```python
+from ...utils.snowflake_utils import check_table_read_access
+
+# Check if we can read from the table
+can_read = check_table_read_access(
+    etl.session,
+    config=ORDERS_TABLE,
+    year=2025
+)
+
+if can_read:
+    # Safe to proceed with data extraction
+    df = etl.session.table(ORDERS_TABLE.generate_table_name(year=2025))
+else:
+    logger.error("No read access to orders table")
+```
+
+**Returns:** `True` if read succeeds, `False` if table doesn't exist or is inaccessible
+
+#### `parse_table_path()`
+
+Internal helper that resolves table paths from either TableConfig or explicit components.
+
+```python
+from ...utils.snowflake_utils import parse_table_path
+
+# From TableConfig
+path = parse_table_path(config=SALES_TABLE, year=2025)
+print(path.database)   # "ANALYTICS"
+print(path.schema)     # "RAW"
+print(path.table)      # "sales_2025"
+print(path.full_name)  # "ANALYTICS.RAW.sales_2025"
+
+# From explicit parts
+path = parse_table_path(
+    database_name="PROD",
+    schema_name="DIM",
+    table_name="customers"
+)
+```
+
+**Returns:** `ParsedTablePath` with `database`, `schema`, `table`, and `full_name` attributes
+
+**Best Practices:**
+- Prefer using TableConfig parameter over explicit paths for consistency
+- Use `check_table_exists()` before operations that assume table presence
+- Use `check_table_read_access()` to verify permissions before data extraction
+- Use `get_table_last_modified()` for freshness checks and monitoring
+- All functions handle errors gracefully and log warnings/errors appropriately
+
+**Common Use Cases:**
+- Pre-flight checks in pipeline `__init__()` to validate table availability
+- Permission verification before attempting data extraction
+- Freshness monitoring for data quality and staleness detection
+- Dynamic table discovery with TableConfig integration
+- Error handling for missing or inaccessible tables
