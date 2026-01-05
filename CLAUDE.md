@@ -90,6 +90,18 @@ twine upload dist/*
 - All template files verified to exist at expected paths
 - All tests pass
 
+### Task 2.1: Create Databricks etl.py Template ✅
+
+- Created `templates/databricks/init/etl.py.template`
+- Uses `DatabricksSession` from `databricks.connect`
+- Implements singleton pattern matching Snowflake version structure
+- Has dual connection strategy:
+  - Primary: `DatabricksSession.builder.getOrCreate()` for workspace environments
+  - Fallback: credentials.py for local development
+- Includes proper docstrings and usage examples
+- Has "Framework File - Do Not Modify" header
+- Syntax validated with py_compile
+
 ### Task 2.2: Create Databricks databricks_utils.py Template ✅
 
 - Created `templates/databricks/init/databricks_utils.py.template`
@@ -108,6 +120,16 @@ twine upload dist/*
 - Has "Framework File - Do Not Modify" header
 - Syntax validated with py_compile
 
+### Task 2.3: Create Databricks decorators.py Template ✅
+
+- Created `templates/databricks/init/decorators.py.template`
+- `@time_function` decorator included (unchanged from Snowflake - platform-agnostic)
+- `@skip_if_exists` adapted to use `session.catalog.tableExists()` for Unity Catalog
+- `@skip_if_updated_this_month` adapted to query `system.information_schema.tables` for `last_altered` timestamp
+- All decorators have proper docstrings and type hints
+- Has "Framework File - Do Not Modify" header
+- Syntax validated with py_compile
+
 ### Task 2.4: Create Databricks table_cache.py Template ✅
 
 - Created `templates/databricks/init/table_cache.py.template`
@@ -119,6 +141,31 @@ twine upload dist/*
 - Updated documentation references from "Snowpark" to "Spark/PySpark"
 - Includes proper docstrings and type hints
 - Has "Framework File - Do Not Modify" header
+- Syntax validated with py_compile
+
+### Task 2.5a: Create Databricks dependencies.py Template ✅
+
+- Created `templates/databricks/init/dependencies.py.template`
+- Contains `BASE_DEPENDENCIES` with Databricks-specific packages:
+  - pyspark>=3.5.0
+  - delta-spark>=3.0.0
+  - databricks-connect>=13.0.0
+  - Standard packages: numpy, pandas, build, twine, ruff, pre-commit, pytest, pytest-cov
+- Contains empty `USER_DEPENDENCIES` list for user additions
+- Contains `DEFAULT_DEPENDENCIES = BASE_DEPENDENCIES + USER_DEPENDENCIES`
+- Includes docstring explaining usage and sync-deps workflow
+- Syntax validated with py_compile
+
+### Task 2.5b: Create Databricks credentials.py.example Template ✅
+
+- Created `templates/databricks/init/credentials.py.example.template`
+- Contains `DATABRICKS_HOST` variable with example workspace URL
+- Contains `DATABRICKS_TOKEN` variable with placeholder for Personal Access Token
+- Contains `DATABRICKS_CLUSTER_ID` variable with placeholder for cluster ID
+- Includes comprehensive security warnings about not committing credentials
+- Includes setup instructions for copying to credentials.py
+- Documents usage for local development vs. workspace deployment
+- Includes alternative approach using environment variables
 - Syntax validated with py_compile
 
 ## Architecture
