@@ -1,8 +1,119 @@
 from pathlib import Path
 from dataclasses import dataclass
+from enum import Enum
+import tomllib
 
-PATH_TO_LICENSES = Path(__file__).parent / "templates" / "licenses"
-PATH_TO_INIT_TEMPLATES = Path(__file__).parent / "templates" / "init"
+
+class Platform(str, Enum):
+    """Supported platforms for pypeline projects."""
+    SNOWFLAKE = "snowflake"
+    DATABRICKS = "databricks"
+
+
+def get_platform_from_toml(toml_path: Path | None = None) -> str | None:
+    """
+    Read platform from pyproject.toml [tool.pypeline] section.
+
+    Args:
+        toml_path: Path to pyproject.toml file. If None, searches for it in current directory.
+
+    Returns:
+        Platform string ("snowflake" or "databricks") or None if not found.
+
+    Raises:
+        FileNotFoundError: If toml_path provided but doesn't exist
+    """
+    if toml_path is None:
+        toml_path = Path.cwd() / "pyproject.toml"
+
+    if not toml_path.exists():
+        if toml_path == Path.cwd() / "pyproject.toml":
+            return None  # Not found in current directory
+        raise FileNotFoundError(f"pyproject.toml not found at {toml_path}")
+
+    try:
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+
+        platform = data.get("tool", {}).get("pypeline", {}).get("platform")
+        return platform
+    except Exception:
+        return None
+
+
+# Template path constants
+PATH_TO_TEMPLATES = Path(__file__).parent / "templates"
+PATH_TO_SHARED_INIT = PATH_TO_TEMPLATES / "shared" / "init"
+PATH_TO_LICENSES = PATH_TO_TEMPLATES / "licenses"
+
+
+def get_platform_init_path(platform: str) -> Path:
+    """
+    Get platform-specific init templates path.
+
+    Args:
+        platform: Platform name ("snowflake" or "databricks")
+
+    Returns:
+        Path to platform's init templates directory
+
+    Example:
+        >>> get_platform_init_path("snowflake")
+        Path(".../templates/snowflake/init")
+    """
+    return PATH_TO_TEMPLATES / platform / "init"
+
+
+def get_platform_pipelines_path(platform: str) -> Path:
+    """
+    Get platform-specific pipeline templates path.
+
+    Args:
+        platform: Platform name ("snowflake" or "databricks")
+
+    Returns:
+        Path to platform's pipeline templates directory
+
+    Example:
+        >>> get_platform_pipelines_path("databricks")
+        Path(".../templates/databricks/pipelines")
+    """
+    return PATH_TO_TEMPLATES / platform / "pipelines"
+
+
+def get_platform_processors_path(platform: str) -> Path:
+    """
+    Get platform-specific processor templates path.
+
+    Args:
+        platform: Platform name ("snowflake" or "databricks")
+
+    Returns:
+        Path to platform's processor templates directory
+
+    Example:
+        >>> get_platform_processors_path("snowflake")
+        Path(".../templates/snowflake/processors")
+    """
+    return PATH_TO_TEMPLATES / platform / "processors"
+
+
+def get_platform_dependencies_template(platform: str) -> Path:
+    """
+    Get platform-specific dependencies.py template path.
+
+    Args:
+        platform: Platform name ("snowflake" or "databricks")
+
+    Returns:
+        Path to platform's dependencies.py.template file
+
+    Example:
+        >>> get_platform_dependencies_template("snowflake")
+        Path(".../templates/snowflake/init/dependencies.py.template")
+    """
+    return get_platform_init_path(platform) / "dependencies.py.template"
+
 
 LICENSES = {
     "MIT": PATH_TO_LICENSES / "mit.txt",
@@ -21,20 +132,6 @@ LICENSES = {
     "Proprietary": PATH_TO_LICENSES / "proprietary.txt",
 }
 
-# Default dependencies for new projects
-DEFAULT_DEPENDENCIES = [
-    "snowflake-snowpark-python>=1.42.0",
-    "numpy>=2.2.6",
-    "pandas>=2.3.3",
-    "build==1.3.0",
-    "twine==6.2.0",
-    "ruff==0.14.9",
-    "pre-commit==4.5.1",
-    "pytest==9.0.2",
-    "pytest-cov==7.0.0",
-    "pytest-asyncio==1.3.0",
-]
-
 
 @dataclass
 class ScaffoldFile:
@@ -44,57 +141,101 @@ class ScaffoldFile:
     destination_property: str
 
 
-INIT_SCAFFOLD_FILES = [
+# Shared scaffold files (platform-agnostic)
+SHARED_SCAFFOLD_FILES = [
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "databases.py.template",
+        template_name=PATH_TO_SHARED_INIT / "databases.py.template",
         destination_property="databases_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "date_parser.py.template",
+        template_name=PATH_TO_SHARED_INIT / "date_parser.py.template",
         destination_property="date_parser_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "etl.py.template",
-        destination_property="etl_file",
-    ),
-    ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "logger.py.template",
+        template_name=PATH_TO_SHARED_INIT / "logger.py.template",
         destination_property="logger_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "decorators.py.template",
-        destination_property="decorators_file",
+        template_name=PATH_TO_SHARED_INIT / "types.py.template",
+        destination_property="types_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "snowflake_utils.py.template",
-        destination_property="snowflake_utils_file",
-    ),
-    ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "basic_test.py.template",
+        template_name=PATH_TO_SHARED_INIT / "basic_test.py.template",
         destination_property="basic_test_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / ".gitignore.template",
+        template_name=PATH_TO_SHARED_INIT / ".gitignore.template",
         destination_property="gitignore_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "README.md.template",
+        template_name=PATH_TO_SHARED_INIT / "README.md.template",
         destination_property="init_readme_file",
     ),
     ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "_init.py.template",
+        template_name=PATH_TO_SHARED_INIT / "_init.py.template",
         destination_property="_init_file",
     ),
-    ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "table_cache.py.template",
-        destination_property="table_cache_file",
-    ),
-    ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "types.py.template",
-        destination_property="types_file"
-    ),
-    ScaffoldFile(
-        template_name=PATH_TO_INIT_TEMPLATES / "credentials.py.example.template",
-        destination_property="credentials_example_file",
-    )
 ]
+
+
+def get_platform_scaffold_files(platform: str) -> list[ScaffoldFile]:
+    """
+    Get combined shared and platform-specific scaffold files.
+
+    Args:
+        platform: Platform name ("snowflake" or "databricks")
+
+    Returns:
+        List of ScaffoldFile objects for project initialization,
+        combining shared files with platform-specific files.
+
+    Raises:
+        ValueError: If platform is not supported
+
+    Example:
+        >>> files = get_platform_scaffold_files("snowflake")
+        >>> len(files)  # 8 shared + 5 snowflake-specific
+        13
+    """
+    if platform not in [Platform.SNOWFLAKE.value, Platform.DATABRICKS.value]:
+        raise ValueError(
+            f"Unsupported platform: {platform}. "
+            f"Must be '{Platform.SNOWFLAKE.value}' or '{Platform.DATABRICKS.value}'"
+        )
+
+    platform_init_path = get_platform_init_path(platform)
+
+    # Platform-specific files (same structure for both Snowflake and Databricks)
+    platform_files = [
+        ScaffoldFile(
+            template_name=platform_init_path / "etl.py.template",
+            destination_property="etl_file",
+        ),
+        ScaffoldFile(
+            template_name=platform_init_path / "decorators.py.template",
+            destination_property="decorators_file",
+        ),
+        ScaffoldFile(
+            template_name=platform_init_path / "table_cache.py.template",
+            destination_property="table_cache_file",
+        ),
+        ScaffoldFile(
+            template_name=platform_init_path / "credentials.py.example.template",
+            destination_property="credentials_example_file",
+        ),
+    ]
+
+    # Platform-specific utils file (snowflake_utils.py or databricks_utils.py)
+    platform_utils_file = ScaffoldFile(
+        template_name=platform_init_path / f"{platform}_utils.py.template",
+        destination_property="platform_utils_file",
+    )
+    platform_files.append(platform_utils_file)
+
+    # Combine shared and platform-specific files
+    return SHARED_SCAFFOLD_FILES + platform_files
+
+
+# DEPRECATED: Use get_platform_scaffold_files() instead
+# Kept for backwards compatibility - defaults to Snowflake platform
+INIT_SCAFFOLD_FILES = get_platform_scaffold_files(Platform.SNOWFLAKE.value)

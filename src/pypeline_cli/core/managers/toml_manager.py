@@ -5,7 +5,6 @@ import tomli_w
 from typing import List
 
 from .project_context import ProjectContext
-from ...config import DEFAULT_DEPENDENCIES
 from ...utils.dependency_parser import parse_dependencies
 
 
@@ -59,7 +58,7 @@ class TOMLManager:
                 "readme": "README.md",
                 "requires-python": ">=3.12,<3.14",
                 "license": license,
-                "dependencies": DEFAULT_DEPENDENCIES.copy(),
+                "dependencies": [],  # Will be populated by sync-deps after dependencies.py is created
             },
             "tool": {
                 "hatch": hatch_config,

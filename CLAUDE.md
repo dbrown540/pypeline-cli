@@ -69,6 +69,27 @@ twine upload dist/*
 - Moved 2 processor templates to `templates/snowflake/processors/`: processor.py, test_processor.py
 - Removed original files from `templates/init/`, `templates/pipelines/`, `templates/processors/` (directories remain empty for now)
 
+### Task 1.3: Update config.py with Platform Support ✅
+
+- Added `Platform` enum with SNOWFLAKE and DATABRICKS values
+- Added `get_platform_from_toml()` helper function to read platform from pyproject.toml [tool.pypeline] section
+- Updated template path constants to use shared/platform structure:
+  - `PATH_TO_TEMPLATES` - Base path for all templates
+  - `PATH_TO_SHARED_INIT` - Platform-agnostic templates
+  - Removed obsolete `PATH_TO_INIT_TEMPLATES`
+- Added platform path helper functions:
+  - `get_platform_init_path()` - Returns platform's init templates directory
+  - `get_platform_pipelines_path()` - Returns platform's pipelines templates directory
+  - `get_platform_processors_path()` - Returns platform's processors templates directory
+  - `get_platform_dependencies_template()` - Returns platform's dependencies.py.template file
+- Created `SHARED_SCAFFOLD_FILES` list with 8 platform-agnostic template references
+- Added `get_platform_scaffold_files()` function that returns combined shared + platform-specific files
+- Maintained backwards compatibility: `INIT_SCAFFOLD_FILES` now defaults to Snowflake platform
+- Removed `DEFAULT_DEPENDENCIES` constant (now platform-specific in templates)
+- Updated `toml_manager.py` to initialize empty dependencies list (populated via sync-deps)
+- All template files verified to exist at expected paths
+- All tests pass
+
 ## Architecture
 
 ### Manager Pattern
@@ -76,9 +97,9 @@ The codebase uses a manager pattern where specialized managers handle different 
 
 - **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.import_folder`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`).
 
-- **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back.
+- **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back. Creates pyproject.toml with empty dependencies list (populated via sync-deps).
 
-- **DependenciesManager** (`core/managers/dependencies_manager.py`): Reads `DEFAULT_DEPENDENCIES` from user's `dependencies.py` file and manages the template file creation.
+- **DependenciesManager** (`core/managers/dependencies_manager.py`): Reads `DEFAULT_DEPENDENCIES` from user's `dependencies.py` file and manages the template file creation. Dependencies are now platform-specific, defined in each platform's dependencies.py.template file.
 
 - **LicenseManager** (`core/managers/license_manager.py`): Creates LICENSE files from templates in `templates/licenses/`, performing variable substitution for author name, year, etc. Uses `string.Template` for variable substitution.
 
@@ -175,9 +196,20 @@ Templates are stored in `src/pypeline_cli/templates/`:
   - `processor.py.template` - Processor class with __init__() for Extract, process() for Transform
   - `test_processor.py.template` - pytest unit test template with mocking fixtures
 - `licenses/` - 14 different license templates with variable substitution
-- `init/`, `pipelines/`, `processors/` - Legacy directories (empty, to be removed after config.py update in Task 1.3)
+- `databricks/` - Databricks-specific templates (structure created, to be populated in Phase 2):
+  - `init/` - Databricks scaffolding templates (empty)
+  - `pipelines/` - Databricks pipeline templates (empty)
+  - `processors/` - Databricks processor templates (empty)
+- `init/`, `pipelines/`, `processors/` - Legacy directories (empty, will be removed in future task)
 
-The `config.py` file defines `INIT_SCAFFOLD_FILES` list that maps template files to ProjectContext properties for destination paths.
+**Config.py Platform Support**:
+The `config.py` file provides platform-aware template path resolution:
+- `Platform` enum defines SNOWFLAKE and DATABRICKS values
+- `get_platform_from_toml()` reads platform from pyproject.toml [tool.pypeline] section
+- `SHARED_SCAFFOLD_FILES` list contains 8 platform-agnostic templates
+- `get_platform_scaffold_files(platform)` returns combined shared + platform-specific templates (13 for Snowflake)
+- `INIT_SCAFFOLD_FILES` maintained for backwards compatibility (defaults to Snowflake)
+- Path helper functions: `get_platform_init_path()`, `get_platform_pipelines_path()`, `get_platform_processors_path()`, `get_platform_dependencies_template()`
 
 **Template Variable Substitution**:
 Pipeline templates use `string.Template` with variables:
