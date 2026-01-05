@@ -60,6 +60,15 @@ twine upload dist/*
 - No code changes, directory structure only
 - All tests pass
 
+### Task 1.2: Organize Shared and Snowflake Templates ✅
+
+- Moved 8 shared templates to `templates/shared/init/`: databases.py, date_parser.py, logger.py, types.py, basic_test.py, .gitignore, README.md, _init.py
+- Moved 5 Snowflake-specific templates to `templates/snowflake/init/`: etl.py, snowflake_utils.py, decorators.py, table_cache.py, credentials.py.example
+- Moved dependencies.py.template to `templates/snowflake/init/` with BASE_DEPENDENCIES structure
+- Moved 5 pipeline templates to `templates/snowflake/pipelines/`: runner.py, config.py, README.md, processors_init.py, tests_init.py
+- Moved 2 processor templates to `templates/snowflake/processors/`: processor.py, test_processor.py
+- Removed original files from `templates/init/`, `templates/pipelines/`, `templates/processors/` (directories remain empty for now)
+
 ## Architecture
 
 ### Manager Pattern
@@ -140,17 +149,33 @@ The `build` command flow:
 ### Template System
 
 Templates are stored in `src/pypeline_cli/templates/`:
-- `init/` - Project scaffolding templates (databases.py, etl.py, logger.py, decorators.py, table_cache.py, types.py, snowflake_utils.py, date_parser.py, etc.)
-- `licenses/` - 14 different license templates with variable substitution
-- `pipelines/` - Pipeline templates with variable substitution:
+- `shared/init/` - Platform-agnostic scaffolding templates:
+  - `databases.py.template` - Database configuration (user-editable)
+  - `date_parser.py.template` - Date parsing utilities
+  - `logger.py.template` - Logger singleton
+  - `types.py.template` - Shared types, enums, dataclasses
+  - `basic_test.py.template` - Basic test template
+  - `.gitignore.template` - Git ignore patterns
+  - `README.md.template` - Project README
+  - `_init.py.template` - Package __init__.py
+- `snowflake/init/` - Snowflake-specific scaffolding templates:
+  - `etl.py.template` - ETL singleton (uses Snowpark)
+  - `snowflake_utils.py.template` - Snowflake helper functions
+  - `decorators.py.template` - Timing and logging decorators (uses Snowflake APIs)
+  - `table_cache.py.template` - TableCache for pre-loading (uses Snowpark DataFrame)
+  - `credentials.py.example.template` - Snowflake connection parameters
+  - `dependencies.py.template` - BASE_DEPENDENCIES with Snowflake packages
+- `snowflake/pipelines/` - Snowflake pipeline templates with variable substitution:
   - `runner.py.template` - Pipeline orchestrator with run(), pipeline(), run_processors(), _write_to_snowflake()
   - `config.py.template` - Pipeline configuration with Database, Schema, TableConfig imports
   - `README.md.template` - Pipeline documentation structure
   - `processors_init.py.template` - Processors package marker
   - `tests_init.py.template` - Integration tests package marker
-- `processors/` - Processor templates with variable substitution:
+- `snowflake/processors/` - Snowflake processor templates with variable substitution:
   - `processor.py.template` - Processor class with __init__() for Extract, process() for Transform
   - `test_processor.py.template` - pytest unit test template with mocking fixtures
+- `licenses/` - 14 different license templates with variable substitution
+- `init/`, `pipelines/`, `processors/` - Legacy directories (empty, to be removed after config.py update in Task 1.3)
 
 The `config.py` file defines `INIT_SCAFFOLD_FILES` list that maps template files to ProjectContext properties for destination paths.
 
@@ -216,27 +241,20 @@ pypeline-cli/
 │   │       ├── processor_manager.py   # Processor creation
 │   │       └── git_manager.py
 │   ├── templates/
-│   │   ├── init/                 # Template files for generated projects (legacy, to be removed)
 │   │   ├── licenses/             # License templates
-│   │   ├── pipelines/            # Pipeline templates (legacy, to be removed)
-│   │   │   ├── runner.py.template
-│   │   │   ├── config.py.template
-│   │   │   ├── README.md.template
-│   │   │   ├── processors_init.py.template
-│   │   │   └── tests_init.py.template
-│   │   ├── processors/           # Processor templates (legacy, to be removed)
-│   │   │   ├── processor.py.template
-│   │   │   └── test_processor.py.template
 │   │   ├── shared/               # Platform-agnostic templates
-│   │   │   └── init/             # (empty, to be populated)
+│   │   │   └── init/             # 8 shared templates (databases.py, logger.py, types.py, etc.)
 │   │   ├── snowflake/            # Snowflake-specific templates
+│   │   │   ├── init/             # 6 Snowflake init templates (etl.py, snowflake_utils.py, etc.)
+│   │   │   ├── pipelines/        # 5 pipeline templates (runner.py, config.py, etc.)
+│   │   │   └── processors/       # 2 processor templates (processor.py, test_processor.py)
+│   │   ├── databricks/           # Databricks-specific templates
 │   │   │   ├── init/             # (empty, to be populated)
 │   │   │   ├── pipelines/        # (empty, to be populated)
 │   │   │   └── processors/       # (empty, to be populated)
-│   │   └── databricks/           # Databricks-specific templates
-│   │       ├── init/             # (empty, to be populated)
-│   │       ├── pipelines/        # (empty, to be populated)
-│   │       └── processors/       # (empty, to be populated)
+│   │   ├── init/                 # Legacy directory (empty, to be removed in Task 1.3)
+│   │   ├── pipelines/            # Legacy directory (empty, to be removed in Task 1.3)
+│   │   └── processors/           # Legacy directory (empty, to be removed in Task 1.3)
 │   └── utils/
 │       ├── dependency_parser.py  # Parse dependency strings
 │       ├── valdators.py          # Input validation
