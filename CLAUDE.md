@@ -168,6 +168,21 @@ twine upload dist/*
 - Includes alternative approach using environment variables
 - Syntax validated with py_compile
 
+### Task 2.6: Create Databricks Pipeline Templates ✅
+
+- Created all 5 Databricks pipeline templates in `templates/databricks/pipelines/`:
+  - `runner.py.template` - Uses PySpark DataFrame and Delta Lake writes
+  - `config.py.template` - Same as Snowflake (platform-agnostic TableConfig)
+  - `README.md.template` - Updated references to Databricks and Unity Catalog
+  - `processors_init.py.template` - Package marker (same as Snowflake)
+  - `tests_init.py.template` - Package marker (same as Snowflake)
+- runner.py uses `from pyspark.sql import DataFrame` instead of Snowpark
+- Write method renamed to `_write_to_databricks()` instead of `_write_to_snowflake()`
+- Write operation uses Delta format: `df.write.format("delta").mode(write_mode).saveAsTable(table_path)`
+- README.md references Unity Catalog (CATALOG.SCHEMA.TABLE) instead of Snowflake databases
+- All templates include correct variable placeholders ($class_name, $pipeline_name, $project_name)
+- All templates validated with py_compile
+
 ## Architecture
 
 ### Manager Pattern
