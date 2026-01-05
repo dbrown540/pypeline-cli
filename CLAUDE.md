@@ -108,6 +108,19 @@ twine upload dist/*
 - Has "Framework File - Do Not Modify" header
 - Syntax validated with py_compile
 
+### Task 2.4: Create Databricks table_cache.py Template ✅
+
+- Created `templates/databricks/init/table_cache.py.template`
+- Uses PySpark DataFrame imports (`from pyspark.sql import DataFrame`)
+- TableCache class structure matches Snowflake version
+- Methods: `add_table()`, `get_table()`, `preload_tables()`, `clear_cache()`, `get_cache_info()`, `_load_table()`
+- Table loading uses `self.etl.session.table(table_name)` (Unity Catalog aware)
+- Updated documentation references from "Snowflake" to "Databricks"
+- Updated documentation references from "Snowpark" to "Spark/PySpark"
+- Includes proper docstrings and type hints
+- Has "Framework File - Do Not Modify" header
+- Syntax validated with py_compile
+
 ## Architecture
 
 ### Manager Pattern
