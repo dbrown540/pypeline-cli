@@ -90,6 +90,24 @@ twine upload dist/*
 - All template files verified to exist at expected paths
 - All tests pass
 
+### Task 2.2: Create Databricks databricks_utils.py Template ✅
+
+- Created `templates/databricks/init/databricks_utils.py.template`
+- Uses Unity Catalog APIs for table operations:
+  - `system.information_schema.tables` for metadata queries
+  - `session.catalog.tableExists()` for existence checks
+  - `session.sql()` for read access verification
+- Implements 4 functions with matching signatures to snowflake_utils:
+  - `get_table_last_modified()` - Query Unity Catalog INFORMATION_SCHEMA
+  - `check_table_exists()` - Use `session.catalog.tableExists()`
+  - `check_table_read_access()` - Attempt minimal SELECT query
+  - `parse_table_path()` - Convert TableConfig to ParsedTablePath
+- Uses PySpark imports (`from pyspark.sql import SparkSession`)
+- Parameters use `catalog_name` instead of `database_name`
+- Includes proper docstrings and type hints
+- Has "Framework File - Do Not Modify" header
+- Syntax validated with py_compile
+
 ## Architecture
 
 ### Manager Pattern
