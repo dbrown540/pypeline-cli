@@ -2,7 +2,7 @@
 
 ## Overview
 
-Refactor pypeline-cli to support both **Snowflake (Snowpark)** and **Databricks (PySpark)** platforms. This plan maintains backwards compatibility while enabling platform-specific template scaffolding through a clean, extensible architecture.
+Refactor pypeline-cli to support both **Snowflake (Snowpark)** and **Databricks (PySpark)** platforms. 
 
 ## User Requirements Summary
 
