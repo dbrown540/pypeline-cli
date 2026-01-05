@@ -50,6 +50,16 @@ twine check dist/*
 twine upload dist/*
 ```
 
+## Refactoring Progress
+
+### Task 1.1: Create Template Directory Structure ✅
+
+- Created new template directory structure: `templates/shared/`, `templates/snowflake/`, `templates/databricks/`
+- Each platform directory contains: `init/`, `pipelines/`, `processors/` subdirectories (currently empty)
+- Existing template directories (`init/`, `pipelines/`, `processors/`) remain in place for now
+- No code changes, directory structure only
+- All tests pass
+
 ## Architecture
 
 ### Manager Pattern
@@ -206,17 +216,27 @@ pypeline-cli/
 │   │       ├── processor_manager.py   # Processor creation
 │   │       └── git_manager.py
 │   ├── templates/
-│   │   ├── init/                 # Template files for generated projects
+│   │   ├── init/                 # Template files for generated projects (legacy, to be removed)
 │   │   ├── licenses/             # License templates
-│   │   ├── pipelines/            # Pipeline templates
+│   │   ├── pipelines/            # Pipeline templates (legacy, to be removed)
 │   │   │   ├── runner.py.template
 │   │   │   ├── config.py.template
 │   │   │   ├── README.md.template
 │   │   │   ├── processors_init.py.template
 │   │   │   └── tests_init.py.template
-│   │   └── processors/           # Processor templates
-│   │       ├── processor.py.template
-│   │       └── test_processor.py.template
+│   │   ├── processors/           # Processor templates (legacy, to be removed)
+│   │   │   ├── processor.py.template
+│   │   │   └── test_processor.py.template
+│   │   ├── shared/               # Platform-agnostic templates
+│   │   │   └── init/             # (empty, to be populated)
+│   │   ├── snowflake/            # Snowflake-specific templates
+│   │   │   ├── init/             # (empty, to be populated)
+│   │   │   ├── pipelines/        # (empty, to be populated)
+│   │   │   └── processors/       # (empty, to be populated)
+│   │   └── databricks/           # Databricks-specific templates
+│   │       ├── init/             # (empty, to be populated)
+│   │       ├── pipelines/        # (empty, to be populated)
+│   │       └── processors/       # (empty, to be populated)
 │   └── utils/
 │       ├── dependency_parser.py  # Parse dependency strings
 │       ├── valdators.py          # Input validation
