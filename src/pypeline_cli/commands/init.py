@@ -42,6 +42,14 @@ from ..config import LICENSES
     help="Company or organization name (optional, for license)",
 )
 @click.option(
+    "--platform",
+    type=click.Choice(["snowflake", "databricks"], case_sensitive=False),
+    prompt="Select platform",
+    default="snowflake",
+    help="Data platform (snowflake or databricks)",
+    show_choices=True,
+)
+@click.option(
     "--git/--no-git",
     default=False,
     help="Initialize a git repository (default: disabled)",
@@ -54,6 +62,7 @@ def init(
     description: str,
     license: str,
     company_name: str,
+    platform: str,
     git: bool,
 ):
     """Create new ETL pipeline architecture"""
@@ -80,6 +89,7 @@ def init(
             license=license,
             company_name=company_name,
             path=path,
+            platform=platform.lower(),
             use_git=git,
         )
 
@@ -89,6 +99,7 @@ def init(
         click.echo(f"  • Author: {author_name} <{author_email}>")
         click.echo(f"  • Description: {description}")
         click.echo(f"  • License: {license}")
+        click.echo(f"  • Platform: {platform}")
         click.echo("\n📂 Next steps:")
         click.echo(f"  1. cd {path}")
         click.echo("  2. pypeline install")

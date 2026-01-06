@@ -183,6 +183,20 @@ twine upload dist/*
 - All templates include correct variable placeholders ($class_name, $pipeline_name, $project_name)
 - All templates validated with py_compile
 
+### Task 3.2: Update TOMLManager to Store Platform ✅
+
+- Added `platform` parameter to `TOMLManager.create()` method
+- Platform stored in `[tool.pypeline].platform` field in pyproject.toml
+- Updated `init` command to prompt for platform selection (defaults to "snowflake")
+- Updated `create_project()` to accept and pass platform parameter to managers
+- Updated `DependenciesManager` to accept optional platform parameter for init vs. existing project scenarios
+- Updated `ProjectContext.dependencies_template` property to read platform from pyproject.toml and use platform-specific template
+- Added `ProjectContext.platform_utils_file` property for dynamic platform utils path resolution
+- Platform value correctly stored in pyproject.toml for both Snowflake and Databricks
+- Verified correct platform-specific files are created (snowflake_utils.py vs databricks_utils.py)
+- Verified correct platform-specific dependencies.py template is used
+- All tests pass
+
 ## Architecture
 
 ### Manager Pattern
@@ -190,7 +204,7 @@ The codebase uses a manager pattern where specialized managers handle different 
 
 - **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.import_folder`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`).
 
-- **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back. Creates pyproject.toml with empty dependencies list (populated via sync-deps).
+- **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `create()` method accepts a `platform` parameter and stores it in `[tool.pypeline].platform` field. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back. Creates pyproject.toml with empty dependencies list (populated via sync-deps).
 
 - **DependenciesManager** (`core/managers/dependencies_manager.py`): Reads `DEFAULT_DEPENDENCIES` from user's `dependencies.py` file and manages the template file creation. Dependencies are now platform-specific, defined in each platform's dependencies.py.template file.
 

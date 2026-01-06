@@ -8,9 +8,15 @@ from .project_context import ProjectContext
 
 
 class DependenciesManager:
-    def __init__(self, ctx: ProjectContext) -> None:
+    def __init__(self, ctx: ProjectContext, platform: str | None = None) -> None:
         self.dependencies_path = ctx.dependencies_path
-        self.dependencies_template = ctx.dependencies_template
+        if platform:
+            # During init - use provided platform
+            from ...config import get_platform_dependencies_template
+            self.dependencies_template = get_platform_dependencies_template(platform)
+        else:
+            # Existing project - read from context (which reads from toml)
+            self.dependencies_template = ctx.dependencies_template
 
     def create(self):
         shutil.copy(self.dependencies_template, self.dependencies_path)

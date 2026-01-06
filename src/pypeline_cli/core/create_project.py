@@ -6,7 +6,7 @@ from .managers.dependencies_manager import DependenciesManager
 from .managers.license_manager import LicenseManager
 from .managers.scaffolding_manager import ScaffoldingManager
 from .managers.git_manager import create_git_repo
-from ..config import INIT_SCAFFOLD_FILES
+from ..config import get_platform_scaffold_files
 
 
 def create_project(
@@ -18,6 +18,7 @@ def create_project(
     license: str,
     company_name: str,
     path: Path,
+    platform: str,
     use_git: bool = False,
 ):
     # Create the project root
@@ -49,10 +50,11 @@ def create_project(
         author_email=author_email,
         description=description,
         license=license,
+        platform=platform,
         use_git=use_git,
     )
 
-    dependencies_manager = DependenciesManager(ctx=ctx)
+    dependencies_manager = DependenciesManager(ctx=ctx, platform=platform)
     dependencies_manager.create()
 
     # Create license
@@ -78,4 +80,5 @@ def create_project(
         ]
     )
 
-    scaffolding_manager.create_files_from_templates(scaffold_files=INIT_SCAFFOLD_FILES)
+    scaffold_files = get_platform_scaffold_files(platform)
+    scaffolding_manager.create_files_from_templates(scaffold_files=scaffold_files)

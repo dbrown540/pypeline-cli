@@ -19,6 +19,7 @@ class TOMLManager:
         author_email: str,
         description: str,
         license: str,
+        platform: str,
         use_git: bool = False,
     ):
         # Build system configuration depends on whether we're using git versioning
@@ -92,7 +93,7 @@ class TOMLManager:
                         ],
                     },
                 },
-                "pypeline": {"managed": True},
+                "pypeline": {"managed": True, "platform": platform},
             },
         }
 
