@@ -39,6 +39,38 @@ class ProjectContext:
         return self.project_root / "pyproject.toml"
 
     @property
+    def platform(self) -> str:
+        """
+        Get platform from pyproject.toml.
+
+        Returns:
+            Platform string ("snowflake" or "databricks")
+
+        Raises:
+            ValueError: If platform not set in pyproject.toml
+            FileNotFoundError: If pyproject.toml doesn't exist
+        """
+        if not self.toml_path.exists():
+            raise FileNotFoundError(f"pyproject.toml not found at {self.toml_path}")
+
+        try:
+            with open(self.toml_path, "rb") as f:
+                data = tomllib.load(f)
+
+            platform = data.get("tool", {}).get("pypeline", {}).get("platform")
+
+            if platform is None:
+                raise ValueError(
+                    f"Platform not set in {self.toml_path}. "
+                    "Add 'platform = \"snowflake\"' or 'platform = \"databricks\"' "
+                    "to [tool.pypeline] section."
+                )
+
+            return platform
+        except tomllib.TOMLDecodeError as e:
+            raise ValueError(f"Failed to parse {self.toml_path}: {e}")
+
+    @property
     def import_folder(self) -> Path:
         return self.project_root / self.project_root.name
 
@@ -49,16 +81,9 @@ class ProjectContext:
     @property
     def dependencies_template(self) -> Path:
         """Get platform-specific dependencies template path."""
-        from ...config import get_platform_from_toml, get_platform_dependencies_template, Platform
+        from ...config import get_platform_dependencies_template
 
-        # Read platform from pyproject.toml
-        platform = get_platform_from_toml(self.toml_path)
-
-        # Default to snowflake if not found (for backwards compatibility)
-        if platform is None:
-            platform = Platform.SNOWFLAKE.value
-
-        return get_platform_dependencies_template(platform)
+        return get_platform_dependencies_template(self.platform)
 
     @property
     def licenses_path(self) -> Path:
@@ -101,19 +126,9 @@ class ProjectContext:
         return self.project_utils_folder_path / "logger.py"
 
     @property
-    def snowflake_utils_file(self) -> Path:
-        return self.project_utils_folder_path / "snowflake_utils.py"
-
-    @property
     def platform_utils_file(self) -> Path:
         """Get platform-specific utils file path (snowflake_utils.py or databricks_utils.py)."""
-        from ...config import get_platform_from_toml, Platform
-
-        platform = get_platform_from_toml(self.toml_path)
-        if platform is None:
-            platform = Platform.SNOWFLAKE.value
-
-        return self.project_utils_folder_path / f"{platform}_utils.py"
+        return self.project_utils_folder_path / f"{self.platform}_utils.py"
 
     @property
     def basic_test_file(self) -> Path:

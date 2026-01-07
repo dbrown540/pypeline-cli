@@ -183,6 +183,16 @@ twine upload dist/*
 - All templates include correct variable placeholders ($class_name, $pipeline_name, $project_name)
 - All templates validated with py_compile
 
+### Task 3.1: Update ProjectContext with Platform Property ✅
+
+- Added `platform` property that reads from `[tool.pypeline].platform` in pyproject.toml
+- Property raises `ValueError` with clear message if platform field is not set or file doesn't exist
+- Updated `platform_utils_file` property to use `self.platform` instead of calling `get_platform_from_toml()` directly
+- Updated `dependencies_template` property to use `self.platform` for consistency
+- Removed deprecated `snowflake_utils_file` property (breaking change)
+- All properties now consistently use `self.platform` for platform detection
+- All tests pass
+
 ### Task 3.2: Update TOMLManager to Store Platform ✅
 
 - Added `platform` parameter to `TOMLManager.create()` method
@@ -202,7 +212,7 @@ twine upload dist/*
 ### Manager Pattern
 The codebase uses a manager pattern where specialized managers handle different aspects of project creation:
 
-- **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.import_folder`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`).
+- **ProjectContext** (`core/managers/project_context.py`): Discovers project root by walking up the directory tree looking for `pyproject.toml` with `[tool.pypeline]` marker. Provides all path properties as dynamic computed attributes (e.g., `ctx.project_root`, `ctx.import_folder`, `ctx.dependencies_path`, `ctx.pipelines_folder_path`). The `platform` property reads the platform from `[tool.pypeline].platform` and raises `ValueError` if not set. Platform-aware properties like `platform_utils_file` and `dependencies_template` use `self.platform` for dynamic path resolution.
 
 - **TOMLManager** (`core/managers/toml_manager.py`): Handles `pyproject.toml` read/write operations. Uses `tomllib` for reading, `tomli_w` for writing. The `create()` method accepts a `platform` parameter and stores it in `[tool.pypeline].platform` field. The `update_dependencies()` method parses existing deps, merges new ones by package name, and writes back. Creates pyproject.toml with empty dependencies list (populated via sync-deps).
 
